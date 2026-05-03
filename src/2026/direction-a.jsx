@@ -35,6 +35,7 @@ function useNowA() {
 export default function DirectionA({ data, density = "comfortable", bodyType = "mono", accent = "#9b3a2a" }) {
   const [section, setSection] = useStateA("index");
   const [activeCase, setActiveCase] = useStateA(null);
+  const [mobileNavOpen, setMobileNavOpen] = useStateA(false);
   const ts = useNowA();
 
   const styleVars = {
@@ -257,7 +258,7 @@ export default function DirectionA({ data, density = "comfortable", bodyType = "
         /* 3-col guideline grid: meta / body / side */
         .a-frame {
           display: grid;
-          grid-template-columns: 92px minmax(0, 1.35fr) minmax(360px, 1fr);
+          grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1fr);
           gap: 44px;
           align-items: start;
         }
@@ -413,12 +414,17 @@ export default function DirectionA({ data, density = "comfortable", bodyType = "
       `}</style>
 
       {/* SIDEBAR ----------------------------------------------------------- */}
-      <aside className="dirA-side">
+      <aside className={"dirA-side" + (mobileNavOpen ? " open" : "")}>
         <div className="dirA-brand">
           <div className="mark"><span className="dot">●</span> hwan_choi.fe</div>
           <div className="name">최&nbsp;환</div>
           <div className="role">software_engineer · interfaces · ai</div>
           <div className="ver">v2026.04 · seoul.kr</div>
+          <button
+            type="button"
+            className="dirA-mobile-close"
+            onClick={() => setMobileNavOpen(false)}
+            aria-label="close menu">×</button>
         </div>
 
         <nav className="dirA-nav" aria-label="sections">
@@ -426,7 +432,7 @@ export default function DirectionA({ data, density = "comfortable", bodyType = "
           <button
             key={s.id}
             className={"dirA-tab" + (section === s.id ? " active" : "")}
-            onClick={() => {setSection(s.id);setActiveCase(null);}}>
+            onClick={() => {setSection(s.id);setActiveCase(null);setMobileNavOpen(false);}}>
             
               <span className="num">{s.no}</span>
               <span>{s.label}</span>
@@ -453,6 +459,27 @@ export default function DirectionA({ data, density = "comfortable", bodyType = "
           </div>
         </div>
       </aside>
+
+      {/* MOBILE TOPBAR (only visible on mobile via CSS) ------------------- */}
+      <header className="dirA-topbar" aria-hidden="false">
+        <button
+          type="button"
+          className="dirA-burger"
+          onClick={() => setMobileNavOpen(true)}
+          aria-label="open menu">
+          <span /><span /><span />
+        </button>
+        <div className="dirA-topbar-brand">
+          <span className="dot">●</span>
+          <span><b>최 환</b> · {section}</span>
+        </div>
+        <div className="dirA-topbar-pos">
+          {String(A_SECTIONS.findIndex((s) => s.id === section) + 1).padStart(2, "0")}/{String(A_SECTIONS.length).padStart(2, "0")}
+        </div>
+      </header>
+
+      {/* MOBILE SCRIM */}
+      {mobileNavOpen && <div className="dirA-scrim" onClick={() => setMobileNavOpen(false)} />}
 
       {/* MAIN -------------------------------------------------------------- */}
       <main className="dirA-main">
@@ -523,21 +550,7 @@ export default function DirectionA({ data, density = "comfortable", bodyType = "
           </div>
 
           <div /> {/* spacer */}
-
-          <pre className="gprog">{(() => {
-              const idx = A_SECTIONS.findIndex((s) => s.id === section);
-              const total = A_SECTIONS.length;
-              const filled = "\u2588".repeat(idx + 1);
-              const empty = "\u2591".repeat(total - idx - 1);
-              return (
-                <>
-                <span>{`progress\n`}</span>
-                <span className="bar">{filled}</span>
-                <span className="barmute">{empty}</span>
-                {`  ${idx + 1}/${total}`}
-              </>);
-
-            })()}</pre>
+          <div /> {/* spacer */}
         </div>
       </main>
 
@@ -571,16 +584,6 @@ export default function DirectionA({ data, density = "comfortable", bodyType = "
 function A_Frame({ no, label, ticks = [], children, side }) {
   return (
     <div className="a-frame">
-      <div className="a-col-meta">
-        <div className="ix">{no}</div>
-        <div>{label}</div>
-        <hr />
-        {ticks.length > 0 &&
-        <div className="tic">
-            {ticks.map((t, i) => <span key={i}>{t}</span>)}
-          </div>
-        }
-      </div>
       <div className="a-col-body">{children}</div>
       <div className="a-col-side">{side}</div>
     </div>);
@@ -667,7 +670,6 @@ function A_Index({ data, go }) {
       <div style={{
         display: "grid",
         gap: 40,
-        paddingTop: 24
       }}>
         <div>
           <div className="meta" style={{ marginBottom: 18 }}>
@@ -1127,4 +1129,216 @@ function A_Contact({ data }) {
 
 }
 
-window.DirectionA = DirectionA;
+// Inject responsive overrides once
+if (typeof document !== "undefined" && !document.getElementById("dirA-responsive")) {
+  const s = document.createElement("style");
+  s.id = "dirA-responsive";
+  s.textContent = `
+  /* ====== Mobile chrome — hidden on desktop ====== */
+  .dirA-topbar { display: none; }
+  .dirA-scrim { display: none; }
+  .dirA-burger { display: none; }
+  .dirA-mobile-close { display: none; }
+
+  /* ====== TABLET (<= 1100px) — sidebar collapses, drawer activates ====== */
+  @media (max-width: 1100px) {
+    .dirA {
+      grid-template-columns: 1fr !important;
+      grid-template-rows: auto 1fr auto !important;
+      height: 100% !important;
+    }
+
+    /* Sidebar becomes off-canvas drawer */
+    .dirA-side {
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      width: 86vw; max-width: 320px;
+      z-index: 40;
+      transform: translateX(-100%);
+      transition: transform .28s cubic-bezier(.22,.61,.36,1);
+      grid-template-rows: auto auto 1fr auto !important;
+      box-shadow: 4px 0 32px rgba(0,0,0,.12);
+      border-right: 1px solid var(--a-line) !important;
+      overflow-y: auto;
+    }
+    .dirA-side.open { transform: translateX(0); }
+    .dirA-side-log { display: none !important; }
+
+    .dirA-mobile-close {
+      display: block !important;
+      position: absolute; top: 14px; right: 14px;
+      background: transparent; border: 1px solid var(--a-line);
+      width: 36px; height: 36px; cursor: pointer;
+      font-size: 20px; line-height: 1; color: var(--a-mute);
+      font-family: inherit;
+    }
+    .dirA-mobile-close:hover { background: var(--a-ink); color: var(--a-bg); border-color: var(--a-ink); }
+
+    .dirA-scrim {
+      display: block;
+      position: fixed; inset: 0; z-index: 35;
+      background: rgba(26,24,20,.45);
+      animation: aScrimIn .2s ease-out both;
+    }
+    @keyframes aScrimIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* Mobile topbar */
+    .dirA-topbar {
+      display: grid !important;
+      grid-template-columns: auto 1fr auto;
+      align-items: center; gap: 12px;
+      grid-column: 1 !important; grid-row: 1 !important;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--a-line);
+      background: var(--a-bg);
+      font-family: 'JetBrains Mono', 'Pretendard', ui-monospace, monospace;
+      font-size: 12px;
+      position: sticky; top: 0; z-index: 5;
+    }
+    .dirA-burger {
+      display: grid !important;
+      grid-auto-flow: row; gap: 4px;
+      width: 38px; height: 38px;
+      padding: 10px 9px;
+      background: transparent; border: 1px solid var(--a-line);
+      cursor: pointer;
+      align-content: center;
+    }
+    .dirA-burger span {
+      display: block; height: 1.5px;
+      background: var(--a-ink);
+    }
+    .dirA-burger:hover { background: var(--a-ink); }
+    .dirA-burger:hover span { background: var(--a-bg); }
+
+    .dirA-topbar-brand { display: flex; align-items: center; gap: 8px;
+      color: var(--a-mute); font-size: 12px; }
+    .dirA-topbar-brand .dot { color: var(--a-accent); }
+    .dirA-topbar-brand b { color: var(--a-ink); font-weight: 600; }
+    .dirA-topbar-pos {
+      color: var(--a-mute); font-size: 11px; letter-spacing: .06em;
+      padding: 4px 10px; border: 1px solid var(--a-line);
+    }
+
+    .dirA-main { grid-column: 1 !important; grid-row: 2 !important; overflow-y: auto !important; }
+    .dirA-foot { grid-column: 1 !important; grid-row: 3 !important; }
+
+    /* Frame collapses */
+    .a-frame {
+      grid-template-columns: 1fr !important;
+      gap: 24px !important;
+    }
+    .a-col-meta {
+      display: flex !important; flex-direction: row; align-items: baseline;
+      gap: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--a-line);
+      position: static !important;
+    }
+    .a-col-meta hr, .a-col-meta .tic { display: none; }
+    .a-sp {
+      border-left: 0 !important;
+      border-top: 1px solid var(--a-line);
+      padding: 22px 0 0 0 !important;
+    }
+
+    .dirA h1 { font-size: 64px !important; }
+    .dirA h2 { font-size: 28px !important; }
+    .a-modal { width: 88% !important; max-width: 88% !important; padding: 32px 36px !important; }
+  }
+
+  /* ====== MOBILE (<= 640px) — full-bleed, single col ====== */
+  @media (max-width: 640px) {
+    .dirA {
+      --a-pad-x: 22px !important;
+      --a-pad-y: 24px !important;
+    }
+    .dirA-topbar { padding: 12px 16px; }
+    .dirA-topbar-pos { display: none; }
+    .dirA-topbar-brand { font-size: 13px; }
+
+    .dirA-head {
+      grid-template-columns: 1fr !important;
+      gap: 4px !important;
+      padding: 14px var(--a-pad-x) !important;
+      text-align: left !important;
+    }
+    .dirA-head .hh-c { font-size: 13px !important; }
+    .dirA-head .hh-prog { display: none; }
+    .dirA-head .hh-l { font-size: 10px !important; }
+
+    .dirA-body { padding: var(--a-pad-y) var(--a-pad-x) !important; }
+
+    .dirA-ground {
+      grid-template-columns: 1fr !important;
+      padding: 22px var(--a-pad-x) !important;
+      gap: 8px !important;
+    }
+    .dirA-ground .gprog { display: none; }
+    .dirA-ground .gx { font-size: 22px !important; gap: 8px !important; }
+    .dirA-ground .gh { font-size: 10px !important; }
+
+    .a-frame { gap: 18px !important; }
+    .a-col-meta {
+      font-size: 10.5px !important;
+      flex-wrap: wrap;
+    }
+
+    .dirA h1 { font-size: 38px !important; line-height: 1.04 !important; letter-spacing: -.02em !important; }
+    .dirA h1 span[style*="font-size: 28px"], .dirA h1 span[style*="font-size:28px"] {
+      font-size: 13px !important;
+      display: block !important;
+      margin: 8px 0 0 0 !important;
+    }
+    .dirA h2 { font-size: 22px !important; }
+    .dirA .lede { font-size: 15.5px !important; line-height: 1.55 !important; }
+    .dirA .ascii { font-size: 9.5px !important; line-height: 1.3 !important; }
+
+    .a-row2 {
+      grid-template-columns: 1fr !important;
+      gap: 4px !important;
+      padding: 10px 0 !important;
+    }
+    .a-row2 dt { font-size: 9.5px !important; }
+
+    .a-pill { font-size: 10px !important; padding: 2px 7px !important; }
+
+    .a-case-card {
+      grid-template-columns: 36px 1fr !important;
+      gap: 10px !important;
+      padding: 14px 8px !important;
+    }
+    .a-case-card .a-case-arrow { display: none; }
+    .a-case-num { font-size: 16px !important; }
+    .a-case-title { font-size: 14.5px !important; }
+    .a-case-sub { font-size: 11.5px !important; }
+    .a-case-feat { padding-left: 12px !important; padding-right: 8px !important; }
+
+    /* Modal — bottom sheet on mobile */
+    .a-modal-back { align-items: flex-end !important; }
+    .a-modal {
+      width: 100% !important; max-width: 100% !important;
+      height: 92% !important;
+      padding: 26px 22px 32px !important;
+      border-left: 0 !important;
+      border-top: 3px solid var(--a-accent);
+      animation: aModalInBottom .35s cubic-bezier(.22,.61,.36,1) both !important;
+      box-shadow: 0 -20px 60px rgba(0,0,0,.18) !important;
+    }
+    @keyframes aModalInBottom { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+    .dirA-foot {
+      grid-template-columns: 1fr !important;
+      padding: 10px var(--a-pad-x) !important;
+      min-height: auto !important;
+      font-size: 10px !important;
+    }
+    .dirA-foot .l { flex-wrap: wrap; gap: 8px !important; }
+    .dirA-foot .r { display: none !important; }
+
+    .dirA-side { width: 92vw !important; max-width: 360px !important; }
+    .dirA-brand { padding: 22px 18px !important; }
+    .dirA-brand .name { font-size: 16px !important; }
+    .dirA-tab { padding: 11px 18px !important; font-size: 13px !important; }
+  }
+  `;
+  document.head.appendChild(s);
+}
