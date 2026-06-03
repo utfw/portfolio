@@ -3,12 +3,12 @@
 const data = {
   nameEn: "Hwan Choi",
   role: "AI Agent & Frontend Systems Engineer",
-  tagline: "좋은 시스템은 관찰할 수 있어야 합니다. 에이전트도 마찬가지입니다.",
+  tagline: "저는 자신의 동작을 돌아보고 스스로 나아지는 시스템을 만들고 싶습니다.",
   philosophy: {
-    headline: "Good Software is Observable.",
+    headline: "Good Software Improves Itself.",
     body: [
-      "좋은 시스템은 지금 어떤 상태인지 들여다볼 수 있어야 합니다. Agent도 예외는 아닙니다.",
-      "결국 결과의 질을 가르는 것은 모델 자체가 아니라, 상태를 추적하고 실패를 복구하며 검증하고 같은 결과를 반복할 수 있게 만드는 설계라고 믿습니다.",
+      "좋은 시스템은 스스로 나아질 수 있어야 한다고 생각합니다. 그 출발점이 관찰입니다. 지금 어떤 상태인지 알아야 무엇을 고칠지 정할 수 있고, 관찰 → 개선이 반복될 때 비로소 시스템은 발전합니다. 에이전트도 다르지 않다고 봅니다.",
+      "그래서 결과의 질을 가르는 것은 모델 자체가 아니라, 상태를 추적하고 실패를 복구하며 결과를 검증하고 같은 입력에 같은 결과를 내도록 만드는 설계라고 믿습니다.",
     ],
     keywords: [
       "State Tracking",
@@ -18,8 +18,8 @@ const data = {
     ],
   },
   intro: [
-    "심리학을 전공하며 사람이 무엇을 어떻게 인식하는지 오래 들여다봤습니다. 그 관심은 사용자의 의도를 화면으로 옮기는 프론트엔드로, 다시 사용자의 목표를 이해하고 스스로 작업을 수행하는 에이전트 시스템 설계로 이어졌습니다.",
-    "AI 챗봇 엔진, 대규모 그리드 아키텍처, 자율 에이전트 워크플로우까지 — 다루는 영역은 달라져도 신뢰할 수 있는 시스템을 만든다는 기준만큼은 바꾸지 않았습니다.",
+    "저는 심리학을 전공하며 사람이 무엇을 어떻게 인식하는지 오래 들여다봤습니다. 그 관심은 사용자의 의도를 화면으로 옮기는 프론트엔드로, 다시 사용자의 목표를 이해하고 스스로 작업을 수행하는 에이전트 시스템을 설계하는 일로 자연스럽게 이어졌습니다.",
+    "프론트엔드 엔지니어로서 대규모 그리드 엔진과 접근성, AI 챗봇 서비스를 만들어 왔고, 지금은 자율 에이전트 쪽에 가장 큰 관심을 두고 있습니다.",
   ],
   skills: {
     Languages: ["TypeScript", "JavaScript (ES6+)", "Python"],
@@ -37,7 +37,7 @@ const data = {
       tag: "Agent · Workflow · Lab",
       period: "2026.03 — 2026.04",
       problem:
-        "LLM은 코드를 생성할 수 있지만 자신이 만든 결과물을 스스로 검증하기는 어렵습니다. 단발성 호출을 넘어, 관찰 → 계획 → 구현 → 검증 사이클을 반복하며 결과를 다듬어 가는 자율 개선 시스템이 필요했습니다.",
+        "LLM은 코드를 생성할 수 있지만, 자신이 만든 결과물을 스스로 검증하기는 어렵다고 느꼈습니다. 그래서 단발성 호출을 넘어 관찰 → 계획 → 구현 → 검증 사이클을 반복하며 결과를 다듬어 가는 자율 개선 시스템을 직접 만들어 보고 싶었습니다.",
       solution: [
         {
           h: "4-Stage Agent Pipeline",
@@ -57,17 +57,19 @@ const data = {
         },
       ],
       lessons:
-        "에이전트 시스템에서는 모델을 어떻게 호출하느냐보다 상태 관리, 검증 체계, 피드백 루프를 어떻게 설계하느냐가 결과를 좌우했습니다. 결국 결과의 질을 가른 것은 LLM이 아니라 워크플로우였습니다.",
-      architecture: `Observer → Planner → Implementer → Reviewer
-    │           │              │              │
-Playwright   Read-only    Edit/Write     Checklist
- Runtime      계획만        코드수정        검증전용
- 스크린샷      plan.md       TypeCheck    PASS/FAIL`,
+        "이 작업을 하면서, 에이전트 시스템에서는 모델을 어떻게 호출하느냐보다 상태 관리와 검증 체계, 피드백 루프를 어떻게 설계하느냐가 결과를 좌우한다는 것을 배웠습니다. 결과의 질을 가른 것은 LLM이 아니라 워크플로우였다고 생각합니다.",
+      pipeline: [
+        { stage: "Observer", tool: "Playwright", role: "런타임 관찰", out: "스크린샷" },
+        { stage: "Planner", tool: "Read-only", role: "계획 수립", out: "plan.md" },
+        { stage: "Implementer", tool: "Edit / Write", role: "코드 수정", out: "TypeCheck" },
+        { stage: "Reviewer", tool: "Checklist", role: "검증 전용", out: "PASS / FAIL" },
+      ],
+      pipelineNote: "각 단계는 독립된 claude -p 에이전트입니다. 여기에 더해 Evolver(dramaScore 계산 모듈)가 Observer와 Planner 사이에서 정체를 감지해 다음 개선 목표를 자동 생성합니다.",
       evolution: [
         {
           phase: "Phase 1",
           title: "Correctness Loop",
-          body: "Observer → Planner → Implementer → Reviewer로 버그를 잡고 회귀를 막았습니다. 다만 REVIEW_PASS가 반복돼도 장면이 더 나아지지는 않는 한계에 부딪혔습니다.",
+          body: "Observer → Planner → Implementer → Reviewer 구조로 버그를 잡고 회귀를 막았습니다. 다만 REVIEW_PASS가 반복돼도 장면이 더 나아지지는 않는 한계에 부딪혔습니다.",
         },
         {
           phase: "Phase 2",
@@ -118,7 +120,7 @@ Playwright   Read-only    Edit/Write     Checklist
       tag: "AI · Migration · Guardrail",
       period: "2024.06 — 2024.10",
       challenge:
-        "Python(Streamlit) 레거시 챗봇을 React 기반으로 전환하면서, 단순 이식을 넘어 응답 품질과 운영 비용, 기술지원 공수까지 함께 개선하는 것이 과제였습니다.",
+        "Python(Streamlit)으로 만들어진 레거시 챗봇을 React 기반으로 전환하는 일을 맡았습니다. 단순히 옮겨오는 데 그치지 않고 응답 품질과 운영 비용, 기술지원 공수까지 함께 개선하는 것이 과제였습니다.",
       solution: [
         {
           h: "React / Recoil 전면 마이그레이션",
@@ -148,11 +150,11 @@ Playwright   Read-only    Edit/Write     Checklist
       id: "grid-engine",
       number: "03",
       title: "차세대 그리드 엔진",
-      subtitle: "수십만 행 가상 스크롤과 웹 접근성을 양립시킨 그리드 엔진",
+      subtitle: "수백만 행 가상 스크롤과 웹 접근성을 양립시킨 그리드 엔진",
       tag: "Architecture · a11y · Engine",
       period: "2026.01 — 현재",
       challenge:
-        "DOM에 존재하지 않는 행에 키보드 포커스를 유지하고, NVDA 스크린리더가 가상화된 셀을 정확히 탐색하게 만드는 것은 브라우저 렌더링 모델 자체를 깊이 이해해야 하는 문제였습니다.",
+        "DOM에 존재하지 않는 행에 키보드 포커스를 유지하고, NVDA 스크린리더가 가상화된 셀을 정확히 탐색하게 만들어야 했습니다. 이를 풀기 위해서는 브라우저 렌더링 모델 자체를 깊이 이해해야 했습니다.",
       solution: [
         {
           h: "Virtual Rendering Engine 독립 설계",
@@ -173,8 +175,8 @@ Playwright   Read-only    Edit/Write     Checklist
       ],
       stack: ["TypeScript", "Virtual Rendering", "NVDA", "axe-core", "jsdom", "Playwright"],
       metrics: [
-        { k: "처리 규모", v: "대용량 행" },
-        { k: "접근성", v: "WCAG · NVDA" },
+        { k: "처리 규모", v: "수백만 행" },
+        { k: "접근성", v: "WCAG AA · NVDA" },
         { k: "검증", v: "자동화 테스트" },
       ],
     },
@@ -186,7 +188,7 @@ Playwright   Read-only    Edit/Write     Checklist
       tag: "Maintenance · QA · Multi-framework",
       period: "2023.07 — 2025.12",
       challenge:
-        "변경이 도입사 환경으로 곧장 흘러가는 만큼, 한 번의 릴리즈가 React · Vue · Angular 환경 모두에서 깨지지 않게 만드는 것이 가장 큰 과제였습니다.",
+        "수년간 상용 서비스되며 여러 고객사가 운영해 온 제품이라, 코드에는 그만큼 오래된 레거시와 도입사별 커스텀이 쌓여 있었습니다. 그 위에서 한 번의 릴리즈가 어느 환경에서도 기존 동작을 유지하도록 만드는 것이 핵심 과제였습니다.",
       solution: [
         {
           h: "코어 엔진 기능 보완",
@@ -222,7 +224,7 @@ Playwright   Read-only    Edit/Write     Checklist
       { date: "2024.06", desc: "IBChatbot React · Recoil 마이그레이션" },
       { date: "2024.10", desc: "IBChatbot 출시" },
       { date: "2024.10", desc: "대기업 계열사 엔터프라이즈 클라우드 플랫폼 PoC" },
-      { date: "2025.12", desc: "IBSheet8 핸드오프" },
+      { date: "2025.12", desc: "IBSheet8 유지보수에서 차세대 그리드 엔진 신규 개발 전담으로 전환" },
       { date: "2026", desc: "차세대 그리드 엔진 · 자율 에이전트 파이프라인", now: true },
     ],
   },

@@ -24,6 +24,7 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
     setSection((cur) => {
       const curIdx = C2_SECTIONS.findIndex((s) => s.id === cur);
       const nextIdx = C2_SECTIONS.findIndex((s) => s.id === id);
+      if (nextIdx === curIdx) return cur;
       setSlideDir(nextIdx > curIdx ? 1 : -1);
       setAnimKey((k) => k + 1);
       setExpandedCase(null);
@@ -31,9 +32,68 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
     });
   };
 
+  // 인접 섹션으로 한 칸 이동 (좌우 제스처용). 양 끝에서는 멈춤.
+  const goStep = useRefC2(null);
+  goStep.current = (dir) => {
+    setSection((cur) => {
+      const curIdx = C2_SECTIONS.findIndex((s) => s.id === cur);
+      const nextIdx = curIdx + dir;
+      if (nextIdx < 0 || nextIdx >= C2_SECTIONS.length) return cur;
+      setSlideDir(dir);
+      setAnimKey((k) => k + 1);
+      setExpandedCase(null);
+      return C2_SECTIONS[nextIdx].id;
+    });
+  };
+
   useEffectC2(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [section]);
+
+  // ---- 좌우 제스처: 트랙패드 가로 스크롤 + Shift+휠 ----
+  useEffectC2(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    // 한 제스처당 한 섹션만 이동.
+    // 트랙패드 관성으로 wheel 이벤트가 길게 이어지므로,
+    // 발화 후에는 "이벤트가 일정 시간 멈출 때까지" 잠금을 유지한다(=손가락을 뗄 때까지).
+    let locked = false;
+    let accum = 0;
+    let idleTimer = null;
+
+    const scheduleIdle = (delay) => {
+      if (idleTimer) window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(() => {
+        accum = 0;
+        locked = false; // 관성이 멎으면 다음 스윕 허용
+      }, delay);
+    };
+
+    const onWheel = (e) => {
+      // Shift+휠은 deltaY를 가로 의도로 사용, 그 외에는 트랙패드 가로 스크롤(deltaX)
+      const dx = e.shiftKey ? (e.deltaX || e.deltaY) : e.deltaX;
+      const vy = e.shiftKey ? 0 : e.deltaY;
+      if (Math.abs(dx) <= Math.abs(vy)) return; // 세로 스크롤 의도면 그대로
+      e.preventDefault();
+
+      if (locked) { scheduleIdle(200); return; } // 잠긴 동안의 관성은 흡수
+
+      accum += dx;
+      scheduleIdle(200);
+      if (Math.abs(accum) > 90) {
+        locked = true;
+        accum = 0;
+        goStep.current(dx > 0 ? 1 : -1);
+      }
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      if (timer) window.clearTimeout(timer);
+    };
+  }, []);
 
   const vars = {
     "--x-bg": "#fbf9f4",
@@ -132,12 +192,13 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
           background: var(--x-accent);
         }
 
-        /* ---------- MAIN (centered when short, scrollable when tall) ---------- */
+        /* ---------- MAIN (top-aligned, scrollable) ---------- */
         .x-main {
           display: flex;
           flex-direction: column;
-          justify-content: safe center;
+          justify-content: flex-start;
           overflow-y: auto;
+          overscroll-behavior-x: contain;
           padding: 0 64px;
         }
         .x-frame {
@@ -229,8 +290,8 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
           color: var(--x-mute);
           line-height: 1.72;
           display: grid; gap: 22px;
-          padding-top: 28px;
-          border-top: 1px solid var(--x-line);
+          padding-left: 40px;
+          border-left: 1px solid var(--x-line);
         }
         .x-side .lbl {
           font-size: 10.5px;
@@ -392,6 +453,64 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
           padding-left: 15px;
         }
         .x-case-feat:hover { padding-left: 22px; }
+
+        /* ---------- PIPELINE DIAGRAM ---------- */
+        .x-pipe {
+          display: flex;
+          align-items: stretch;
+          gap: 4px;
+          background: var(--x-bg-2);
+          padding: 24px 20px;
+          margin: 0 0 14px;
+          overflow-x: auto;
+        }
+        .x-pipe-stage {
+          flex: 1 1 0;
+          min-width: 96px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 4px 6px;
+        }
+        .x-pipe-name {
+          font-size: 14px;
+          font-weight: 600;
+          letter-spacing: -.01em;
+          color: var(--x-ink);
+        }
+        .x-pipe-tool {
+          font-family: ui-monospace, 'JetBrains Mono', monospace;
+          font-size: 11px;
+          letter-spacing: .02em;
+          color: var(--x-accent);
+        }
+        .x-pipe-rows {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+          margin-top: 2px;
+          padding-top: 8px;
+          border-top: 1px solid var(--x-line);
+          font-size: 12px;
+          line-height: 1.5;
+          color: var(--x-mute);
+        }
+        .x-pipe-arrow {
+          flex: 0 0 auto;
+          align-self: center;
+          color: var(--x-soft);
+          font-size: 15px;
+          padding: 0 2px;
+        }
+        .x-pipe-note {
+          margin: 0 0 32px;
+          padding-left: 14px;
+          border-left: 2px solid var(--x-line);
+          font-size: 13px;
+          line-height: 1.7;
+          color: var(--x-mute);
+          letter-spacing: -.003em;
+        }
 
         /* ---------- ACCORDION ---------- */
         .x-acc { border-bottom: 1px solid var(--x-line); }
@@ -907,7 +1026,7 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
                   <div className="lbl">Bridge</div>
                   <div className="val">심리학 → 엔지니어링</div>
                   <div style={{ color: "var(--x-mute)", marginTop: 8, fontSize: 13.5 }}>
-                    사람을 읽던 시선이, 지금은 AI 인터페이스를 설계하는 손으로 이어졌습니다.
+                    사람을 읽던 시선이, 지금은 AI 인터페이스를 설계하는 일로 이어졌다고 생각합니다.
                   </div>
                 </div>
               </aside>
@@ -944,15 +1063,15 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
 
               <aside className="x-side">
                 <div>
-                  <div className="lbl">Observable</div>
+                  <div className="lbl">Observe → Improve</div>
                   <div className="val" style={{ fontSize: 13.5, lineHeight: 1.7, color: "var(--x-mute)", fontWeight: 400 }}>
-                    상태를 보여줄 수 없다면, 신뢰할 수 없다.
+                    실행 결과를 보고, 다음 개선점을 찾는다.
                   </div>
                 </div>
                 <div>
-                  <div className="lbl">Agent included</div>
+                  <div className="lbl">Self-improving</div>
                   <div className="val" style={{ fontSize: 13.5, lineHeight: 1.7, color: "var(--x-mute)", fontWeight: 400 }}>
-                    LLM도 시스템 설계 원칙의 예외가 아니다.
+                    이 사이클이 반복될수록 시스템은 스스로 나아진다.
                   </div>
                 </div>
               </aside>
@@ -979,22 +1098,30 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
                       <span style={{ fontSize: 12, color: "var(--x-mute)" }}>{bada.tag} · {bada.period}</span>
                     </div>
                     <div style={{ fontSize: 28, fontWeight: 500, letterSpacing: "-.022em", marginBottom: 10 }}>{bada.title}</div>
-                    <p style={{ fontSize: 16, color: "var(--x-mute)", lineHeight: 1.7, margin: "0 0 32px", maxWidth: "52ch" }}>{bada.subtitle}</p>
+                    <p style={{ fontSize: 16, color: "var(--x-mute)", lineHeight: 1.7, margin: "0 0 32px", textWrap: "balance" }}>{bada.subtitle}</p>
 
                     <div className="x-section-h">Problem</div>
                     <p style={{ fontSize: 15.5, lineHeight: 1.82, margin: "0 0 32px", color: "var(--x-ink-2)" }}>{bada.problem}</p>
 
                     <div className="x-section-h">Architecture</div>
-                    <pre style={{
-                      fontFamily: "ui-monospace, 'JetBrains Mono', monospace",
-                      fontSize: 11.5, lineHeight: 1.6,
-                      color: "var(--x-mute)",
-                      background: "var(--x-bg-2)",
-                      padding: "20px 24px",
-                      overflowX: "auto",
-                      margin: "0 0 32px",
-                      whiteSpace: "pre",
-                    }}>{bada.architecture}</pre>
+                    <div className="x-pipe">
+                      {bada.pipeline.map((p, i) =>
+                        <React.Fragment key={p.stage}>
+                          <div className="x-pipe-stage">
+                            <div className="x-pipe-name">{p.stage}</div>
+                            <div className="x-pipe-tool">{p.tool}</div>
+                            <div className="x-pipe-rows">
+                              <span>{p.role}</span>
+                              <span>{p.out}</span>
+                            </div>
+                          </div>
+                          {i < bada.pipeline.length - 1 && <div className="x-pipe-arrow">→</div>}
+                        </React.Fragment>
+                      )}
+                    </div>
+                    {bada.pipelineNote &&
+                    <p className="x-pipe-note">{bada.pipelineNote}</p>
+                    }
 
                     <div className="x-section-h">Solution</div>
                     <div style={{ marginBottom: 32 }}>
@@ -1148,13 +1275,13 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
           <>
               <div>
                 <div className="x-eyebrow"><span className="bar" /><b>04</b> · Contact</div>
-                <h2 className="x-h2">함께 풀어보고 싶은<br />문제가 있다면.</h2>
+                <h2 className="x-h2">잘 만든 시스템을<br />함께 고민할 곳을 찾고 있습니다.</h2>
                 <p className="x-lede" style={{ fontSize: 17 }}>
-                  대규모 그리드든 접근성이든 자율 에이전트든, 같이 고민해 보고 싶은 문제라면 언제든 연락 주세요. 보통 24시간 안에 답장 드립니다.
+                  새로운 문제를 함께 풀어보고 싶다면, 언제든 편하게 연락 주시면 감사하겠습니다.
                 </p>
                 <dl className="x-dl">
                   <div className="x-dl-row"><dt>Email</dt><dd><b>{data.contact.email}</b></dd></div>
-                  <div className="x-dl-row"><dt>GitHub</dt><dd><b><a href="#">{data.contact.github}</a></b></dd></div>
+                  <div className="x-dl-row"><dt>GitHub</dt><dd><b><a href={`https://${data.contact.github}`} target="_blank" rel="noopener noreferrer">{data.contact.github}</a></b></dd></div>
                   <div className="x-dl-row"><dt>Location</dt><dd>{data.contact.location}</dd></div>
                 </dl>
               </div>
