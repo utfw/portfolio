@@ -1,10 +1,10 @@
-import DirectionA from './2026/direction-a.jsx';
+import DirectionC2 from './2026/direction-c2.jsx';
 import data from './2026/data.jsx';
 
 function App() {
 
   return (
-    <DirectionA data={data} />
+    <DirectionC2 data={data} />
   );
 }
 
