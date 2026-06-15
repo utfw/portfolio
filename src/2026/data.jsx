@@ -22,9 +22,9 @@ const data = {
     "프론트엔드 엔지니어로서 대규모 그리드 엔진과 접근성, AI 챗봇 서비스를 만들어 왔고, 지금은 자율 에이전트 쪽에 가장 큰 관심을 두고 있습니다.",
   ],
   skills: {
-    Languages: ["TypeScript", "JavaScript (ES6+)", "Python"],
+    Languages: ["TypeScript", "JavaScript (ES6+)"],
     "Frontend": ["React", "Next.js", "Vue", "Angular", "Recoil", "Chakra UI"],
-    "AI / Agent": ["OpenAI API", "Claude Code", "Ollama", "Embedding", "Prompt Engineering", "Agent Workflow Design"],
+    "AI / Agent": ["OpenAI API", "Claude Code", "Ollama", "RAG", "Embedding", "Prompt Engineering", "Agent Workflow Design"],
     "Testing/QA": ["Playwright", "Puppeteer", "Jest", "axe-core", "jsdom"],
     Engineering: ["Virtual Rendering", "Component Architecture", "Accessibility (WCAG)", "State Management", "Performance Optimization", "CI/CD"],
   },
@@ -36,6 +36,7 @@ const data = {
       subtitle: "자율 에이전트가 코드를 직접 작성하고 검증하는 닫힌 루프를 만들 수 있을까",
       tag: "Agent · Workflow · Lab",
       period: "2026.03 — 2026.04",
+      link: "github.com/utfw/bada",
       problem:
         "LLM은 코드를 생성할 수 있지만, 자신이 만든 결과물을 스스로 검증하기는 어렵다고 느꼈습니다. 그래서 단발성 호출을 넘어 관찰 → 계획 → 구현 → 검증 사이클을 반복하며 결과를 다듬어 가는 자율 개선 시스템을 직접 만들어 보고 싶었습니다.",
       solution: [
@@ -116,8 +117,8 @@ const data = {
       id: "chatbot-engine",
       number: "02",
       title: "IBChatbot",
-      subtitle: "응답의 신뢰성과 API 비용을 함께 잡은 AI 챗봇 마이그레이션",
-      tag: "AI · Migration · Guardrail",
+      subtitle: "RAG 검색 품질을 개선해 응답의 신뢰성과 API 비용을 함께 잡은 AI 챗봇 마이그레이션",
+      tag: "AI · RAG · Migration",
       period: "2024.06 — 2024.10",
       challenge:
         "Python(Streamlit)으로 만들어진 레거시 챗봇을 React 기반으로 전환하는 일을 맡았습니다. 단순히 옮겨오는 데 그치지 않고 응답 품질과 운영 비용, 기술지원 공수까지 함께 개선하는 것이 과제였습니다.",
@@ -127,8 +128,12 @@ const data = {
           d: "Streamlit 구조를 React로 다시 짜고 Recoil로 세션 상태를 일원화했습니다. 자연스러운 텍스트 타이핑 효과와 저해상도 기기용 사이드 메뉴까지 직접 구현했습니다.",
         },
         {
-          h: "Embedding Guardrail · 데이터 정제",
-          d: "OpenAI 임베딩 유사도 필터링으로 무관한 질의를 모델 호출 전에 차단하고, 매뉴얼 문서의 주석·이미지·불필요한 토큰을 제거하는 정제와 프롬프트 엔지니어링으로 비용과 할루시네이션을 함께 줄였습니다.",
+          h: "RAG 검색 품질 개선 · 응답 안전장치",
+          d: "매뉴얼 문서를 OpenAI 임베딩으로 검색해 컨텍스트에 주입하는 기존 RAG 구조 위에서, 검색된 문서의 유사도가 임계값에 못 미치면 모델 호출 없이 대체 응답으로 전환하는 안전장치를 추가했습니다. 이때 '모른다'로 끝내지 않고 고객지원 연락처와 홈페이지 링크를 함께 안내해, 환각을 막으면서도 사용자가 다음 행동을 이어가게 했습니다.",
+        },
+        {
+          h: "데이터 정제 · 프롬프트 엔지니어링",
+          d: "매뉴얼 문서의 주석·이미지·불필요한 토큰을 제거하는 정제와 프롬프트 엔지니어링으로 API 비용과 환각을 함께 줄였습니다.",
         },
         {
           h: "Iframe 코드 샌드박스",
@@ -139,10 +144,10 @@ const data = {
           d: "긴 답변을 위한 DB 로그 저장을 비동기 병렬로 처리하고, 이용 동의 쿠키(7일 유지)를 연동해 운영 환경의 안정성을 확보했습니다.",
         },
       ],
-      stack: ["React", "Recoil", "OpenAI API", "GPT-4o mini", "Python", "Docker"],
+      stack: ["React", "Recoil", "OpenAI API", "GPT-4o mini", "RAG", "Embedding", "Python", "Docker"],
       metrics: [
         { k: "마이그레이션", v: "Python → React" },
-        { k: "응답 신뢰성", v: "Guardrail 적용" },
+        { k: "응답 신뢰성", v: "RAG · 안전장치" },
         { k: "기술지원 공수", v: "절감" },
       ],
     },
@@ -217,15 +222,15 @@ const data = {
   ],
   experience: {
     company: "(주)소프트인",
-    role: "프론트엔드 개발자",
+    role: "프론트엔드 엔지니어",
     period: "2023.07 — 재직 중",
     timeline: [
       { date: "2023.08", desc: "IBSheet8 그리드 엔진 유지보수 · 신규 기능 개발" },
       { date: "2024.06", desc: "IBChatbot React · Recoil 마이그레이션" },
       { date: "2024.10", desc: "IBChatbot 출시" },
-      { date: "2024.10", desc: "대기업 계열사 엔터프라이즈 클라우드 플랫폼 PoC" },
+      { date: "2024.10", desc: "엔터프라이즈 클라우드 플랫폼 PoC 참여" },
       { date: "2025.12", desc: "IBSheet8 유지보수에서 차세대 그리드 엔진 신규 개발 전담으로 전환" },
-      { date: "2026", desc: "차세대 그리드 엔진 · 자율 에이전트 파이프라인", now: true },
+      { date: "2026", desc: "차세대 그리드 엔진 핵심 아키텍처 설계", now: true },
     ],
   },
   education: [
