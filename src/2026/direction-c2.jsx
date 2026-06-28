@@ -5,9 +5,8 @@ const { useState: useStateC2, useEffect: useEffectC2, useRef: useRefC2 } = React
 const C2_SECTIONS = [
 { id: "landing", no: "00", label: "Landing" },
 { id: "about", no: "01", label: "About" },
-{ id: "philosophy", no: "02", label: "Philosophy" },
-{ id: "work", no: "03", label: "Work" },
-{ id: "contact", no: "04", label: "Contact" }];
+{ id: "work", no: "02", label: "Work" },
+{ id: "contact", no: "03", label: "Contact" }];
 
 
 export default function DirectionC2({ data, accent = "#9b3a2a" }) {
@@ -1033,58 +1032,13 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
             </>
           }
 
-          {section === "philosophy" &&
-          <>
-              <div>
-                <div className="x-eyebrow"><span className="bar" /><b>02</b> · Philosophy</div>
-                <h2 className="x-h2">{data.philosophy.headline}</h2>
-                <div style={{ fontSize: 16.5, lineHeight: 1.88, color: "var(--x-ink-2)", marginBottom: 44 }}>
-                  {data.philosophy.body.map((p, i) => <p key={i} style={{ margin: "0 0 1em" }}>{p}</p>)}
-                </div>
-
-                <div className="x-section-h">Core Principles</div>
-                <ul className="x-focus">
-                  {[
-                    "시스템이 지금 어떤 상태인지 언제나 확인할 수 있어야 한다",
-                    "실패는 예외가 아니라 설계의 일부다",
-                    "검증되지 않은 구현은 완성된 구현이 아니다",
-                    "같은 입력은 같은 결과를 보장해야 한다",
-                  ].map((desc, i) =>
-                  <li key={i} className="x-focus-item">
-                        <span className="n">{String(i + 1).padStart(2, "0")}</span>
-                        <div>
-                          <div className="h">{data.philosophy.keywords[i]}</div>
-                          <div className="d">{desc}</div>
-                        </div>
-                      </li>
-                  )}
-                </ul>
-              </div>
-
-              <aside className="x-side">
-                <div>
-                  <div className="lbl">Observe → Improve</div>
-                  <div className="val" style={{ fontSize: 13.5, lineHeight: 1.7, color: "var(--x-mute)", fontWeight: 400 }}>
-                    실행 결과를 보고, 다음 개선점을 찾는다.
-                  </div>
-                </div>
-                <div>
-                  <div className="lbl">Self-improving</div>
-                  <div className="val" style={{ fontSize: 13.5, lineHeight: 1.7, color: "var(--x-mute)", fontWeight: 400 }}>
-                    이 사이클이 반복될수록 시스템은 스스로 나아진다.
-                  </div>
-                </div>
-              </aside>
-            </>
-          }
-
           {section === "work" && (() => {
             const bada = data.caseStudies.find((c) => c.id === "bada");
             const others = cases.filter((c) => c.id !== "bada");
             return (
               <>
                 <div>
-                  <div className="x-eyebrow"><span className="bar" /><b>03</b> · Work</div>
+                  <div className="x-eyebrow"><span className="bar" /><b>02</b> · Work</div>
                   <h2 className="x-h2">프로젝트 나열이 아닌,<br />문제와 설계의 흐름.</h2>
 
                   {/* ── Bada Featured ── */}
@@ -1274,10 +1228,14 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
           {section === "contact" &&
           <>
               <div>
-                <div className="x-eyebrow"><span className="bar" /><b>04</b> · Contact</div>
-                <h2 className="x-h2">잘 만든 시스템을<br />함께 고민할 곳을 찾고 있습니다.</h2>
+                <div className="x-eyebrow"><span className="bar" /><b>03</b> · Contact</div>
+                <h2 className="x-h2">
+                  {data.contact.heading.split("\n").map((line, i, arr) =>
+                  <React.Fragment key={i}>{line}{i < arr.length - 1 && <br />}</React.Fragment>
+                  )}
+                </h2>
                 <p className="x-lede" style={{ fontSize: 17 }}>
-                  새로운 문제를 함께 풀어보고 싶다면, 언제든 편하게 연락 주시면 감사하겠습니다.
+                  {data.contact.lede}
                 </p>
                 <dl className="x-dl">
                   <div className="x-dl-row"><dt>Email</dt><dd><b>{data.contact.email}</b></dd></div>

@@ -2,21 +2,8 @@
 // 렌더링에 실제로 사용되는 필드만 유지합니다.
 const data = {
   nameEn: "Hwan Choi",
-  role: "AI Agent & Frontend Systems Engineer",
-  tagline: "저는 자신의 동작을 돌아보고 스스로 나아지는 시스템을 만들고 싶습니다.",
-  philosophy: {
-    headline: "Good Software Improves Itself.",
-    body: [
-      "좋은 시스템은 스스로 나아질 수 있어야 한다고 생각합니다. 그 출발점이 관찰입니다. 지금 어떤 상태인지 알아야 무엇을 고칠지 정할 수 있고, 관찰 → 개선이 반복될 때 비로소 시스템은 발전합니다. 에이전트도 다르지 않다고 봅니다.",
-      "그래서 결과의 질을 가르는 것은 모델 자체가 아니라, 상태를 추적하고 실패를 복구하며 결과를 검증하고 같은 입력에 같은 결과를 내도록 만드는 설계라고 믿습니다.",
-    ],
-    keywords: [
-      "State Tracking",
-      "Failure Recovery",
-      "Verifiability",
-      "Repeatable Execution",
-    ],
-  },
+  role: "AI Agent & Frontend Engineer",
+  tagline: "저는 무언가가 어떻게 동작하는지 이해하고, 그 위에 더 나은 것을 짓는 일에 관심이 있습니다.",
   intro: [
     "저는 심리학을 전공하며 사람이 무엇을 어떻게 인식하는지 오래 들여다봤습니다. 그 관심은 사용자의 의도를 화면으로 옮기는 프론트엔드로, 다시 사용자의 목표를 이해하고 스스로 작업을 수행하는 에이전트 시스템을 설계하는 일로 자연스럽게 이어졌습니다.",
     "프론트엔드 엔지니어로서 대규모 그리드 엔진과 접근성, AI 챗봇 서비스를 만들어 왔고, 지금은 자율 에이전트 쪽에 가장 큰 관심을 두고 있습니다.",
@@ -58,7 +45,7 @@ const data = {
         },
       ],
       lessons:
-        "이 작업을 하면서, 에이전트 시스템에서는 모델을 어떻게 호출하느냐보다 상태 관리와 검증 체계, 피드백 루프를 어떻게 설계하느냐가 결과를 좌우한다는 것을 배웠습니다. 결과의 질을 가른 것은 LLM이 아니라 워크플로우였다고 생각합니다.",
+        "이 작업을 하면서, 에이전트 시스템에서는 모델을 어떻게 호출하느냐보다 상태 관리와 검증 체계, 피드백 루프를 어떻게 설계하느냐가 결과를 좌우한다는 것을 배웠습니다.",
       pipeline: [
         { stage: "Observer", tool: "Playwright", role: "런타임 관찰", out: "스크린샷" },
         { stage: "Planner", tool: "Read-only", role: "계획 수립", out: "plan.md" },
@@ -238,9 +225,17 @@ const data = {
     { school: "이젠아카데미", detail: "UI/UX 웹·앱 디자인 / React.js", period: "2022.11 — 2023.05" },
   ],
   contact: {
+    heading: "에이전트, UI 엔진, 접근성 —",
+    lede: "어느 쪽이든 함께 풀어볼 문제가 있다면, 메일로 편하게 연락 주세요.",
     email: "hwan.c.0330@gmail.com",
     github: "github.com/utfw",
     location: "Seoul, KR",
+  },
+  // PDF 전용 콘텐츠 — make-pdf.mjs에서만 참조 (사이트 direction-c2.jsx는 사용하지 않음)
+  pdf: {
+    workLead: [
+      "에이전트가 스스로 코드를 고치게 만들었고, 챗봇이 모르는 건 지어내지 않고 다음 갈 곳을 알려주게 했고, 수백만 행을 스크린리더가 읽게 했습니다.",
+    ],
   },
 };
 

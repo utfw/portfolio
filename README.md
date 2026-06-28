@@ -2,7 +2,7 @@
 
 🔗 **[Live Demo →](https://portfolio-utfw.vercel.app/)**
 
-AI Agent & Frontend Systems Engineer의 인터랙티브 포트폴리오입니다.
+AI Agent & Frontend Engineer의 인터랙티브 포트폴리오입니다.
 에이전트 워크플로우, UI 엔진, 웹 접근성을 주제로 한 작업들을 한 페이지 안에 담았습니다.
 
 > "좋은 시스템은 관찰할 수 있어야 합니다. 에이전트도 마찬가지입니다."
