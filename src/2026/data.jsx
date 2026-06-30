@@ -29,11 +29,15 @@ const data = {
       solution: [
         {
           h: "4-Stage Agent Pipeline",
-          d: "Observer(Playwright 관찰) → Planner(goals.md 계획) → Implementer(구현 · 타입 체크) → Reviewer(체크리스트 검증 후 자동 커밋).",
+          d: "Observer(Playwright 관찰) → Planner(goals.md 계획) → Implementer(구현 · 타입 체크) → Reviewer(검증 후 자동 커밋).",
+        },
+        {
+          h: "Two-Layer Verification",
+          d: "산술로 판정되는 항목은 LLM 없이 코드로 결정론적 검증해 계산 오류와 토큰을 줄이고, 그것으로 못 잡는 시각 품질은 Reviewer가 스크린샷 · 탑뷰를 직접 열어 육안 확인.",
         },
         {
           h: "Reflection Loop",
-          d: "REVIEW_FAIL 발생 시 자동 재시도. 실패 패턴을 REVIEW_CHECKLIST.md에 축적해 다음 실행에 반영.",
+          d: "육안 관찰을 적지 않은 통과는 자동 무효 처리하고 REVIEW_FAIL 시 재시도. 실패 패턴을 REVIEW_CHECKLIST.md에 축적해 다음 실행에 반영.",
         },
         {
           h: "Self-Improvement Workflow",
@@ -50,7 +54,7 @@ const data = {
         { stage: "Observer", tool: "Playwright", role: "런타임 관찰", out: "스크린샷" },
         { stage: "Planner", tool: "Read-only", role: "계획 수립", out: "plan.md" },
         { stage: "Implementer", tool: "Edit / Write", role: "코드 수정", out: "TypeCheck" },
-        { stage: "Reviewer", tool: "Checklist", role: "검증 전용", out: "PASS / FAIL" },
+        { stage: "Reviewer", tool: "수치+육안", role: "이중 검증", out: "PASS / FAIL" },
       ],
       pipelineNote: "각 단계는 독립된 claude -p 에이전트입니다. 여기에 더해 Evolver(dramaScore 계산 모듈)가 Observer와 Planner 사이에서 정체를 감지해 다음 개선 목표를 자동 생성합니다.",
       evolution: [
@@ -90,7 +94,7 @@ const data = {
       lessonsLearned: [
         { n: "01", h: "Evaluation is harder than Generation", d: "평가 기준이 없으면 개선할 목표도 생기지 않습니다." },
         { n: "02", h: "Metrics are not understanding", d: "측정값이 맞아도 그 의미를 잘못 읽을 수 있습니다." },
-        { n: "03", h: "Evaluation systems require evaluation", d: "평가 기준도 코드와 함께 끊임없이 갱신되어야 합니다." },
+        { n: "03", h: "Evaluation systems require evaluation", d: "멀티모달 판정도 바로 합격에 쓰지 않고, 사람 라벨과 대조해 신뢰성부터 측정했습니다." },
         { n: "04", h: "Correctness does not imply progress", d: "퇴행을 막는 루프와 진보를 만드는 루프는 따로 설계해야 합니다." },
         { n: "05", h: "Human judgment remains necessary", d: "자동화할 수 있는 영역과 사람이 필요한 영역의 경계를 분명히 긋는 것이 핵심입니다." },
       ],
