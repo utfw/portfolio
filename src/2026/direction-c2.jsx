@@ -1234,9 +1234,6 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
                   <React.Fragment key={i}>{line}{i < arr.length - 1 && <br />}</React.Fragment>
                   )}
                 </h2>
-                <p className="x-lede" style={{ fontSize: 17 }}>
-                  {data.contact.lede}
-                </p>
                 <dl className="x-dl">
                   <div className="x-dl-row"><dt>Email</dt><dd><b>{data.contact.email}</b></dd></div>
                   <div className="x-dl-row"><dt>GitHub</dt><dd><b><a href={`https://${data.contact.github}`} target="_blank" rel="noopener noreferrer">{data.contact.github}</a></b></dd></div>
