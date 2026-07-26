@@ -13,7 +13,7 @@ const data = {
     "Frontend": ["React", "Next.js", "Vue", "Angular", "Recoil", "Chakra UI"],
     "AI / Agent": ["OpenAI API", "Claude Code", "Ollama", "RAG", "Embedding", "Prompt Engineering", "Agent Workflow Design"],
     "Testing/QA": ["Playwright", "Puppeteer", "Jest", "axe-core", "jsdom"],
-    Engineering: ["Virtual Rendering", "Component Architecture", "Accessibility (WCAG)", "State Management", "Performance Optimization", "CI/CD"],
+    Engineering: ["Virtual Rendering", "Component Architecture", "Accessibility (WCAG)", "State Management", "Performance Optimization", "CI/CD", "GitHub Actions (self-hosted)"],
   },
   caseStudies: [
     {
@@ -44,8 +44,16 @@ const data = {
           d: "Reviewer의 개선 제안(SUGGESTIONS)을 goals.md에 자동 반영해 다음 사이클의 목표로 전환.",
         },
         {
+          h: "Always-On Runner Loop",
+          d: "self-hosted GitHub Actions 러너 위에서 사람 트리거 없이 반복 실행. 래퍼 스크립트가 종료 코드로 분기해 정상 종료면 잠깐 쉬고 다음 반복, 사용 한도(exit 75)면 리셋 시각까지 대기 후 스스로 재개, 예기치 않은 실패일 때만 루프를 멈추고 사람을 기다림.",
+        },
+        {
+          h: "Unattended Guardrails",
+          d: "완료되지 않은 목표가 남긴 변경은 되돌리고, 변경 0인 완료는 커밋하지 않으며, 커밋 본문에 실제 변경 파일을 기록. 에이전트 자신의 코드는 자동 커밋에서 제외해 사람 검토를 거치게 함.",
+        },
+        {
           h: "Multi-Model Architecture",
-          d: "Ollama(로컬 경량 추론)와 Claude Code(복잡한 구현)를 역할에 따라 분리 활용.",
+          d: "Ollama(로컬 경량 추론)와 Claude Code(복잡한 구현)를 역할에 따라 분리 활용. 상시 루프에서는 목표 생성·중복 판정 같은 가벼운 작업을 로컬 모델이 먼저 맡고, 없거나 형식을 어기면 Claude가 폴백해 사용 한도를 아끼면서 루프가 끊기지 않게 함.",
         },
       ],
       lessons:
@@ -56,7 +64,7 @@ const data = {
         { stage: "Implementer", tool: "Edit / Write", role: "코드 수정", out: "TypeCheck" },
         { stage: "Reviewer", tool: "수치+육안", role: "이중 검증", out: "PASS / FAIL" },
       ],
-      pipelineNote: "각 단계는 독립된 claude -p 에이전트입니다. 여기에 더해 Evolver(dramaScore 계산 모듈)가 Observer와 Planner 사이에서 정체를 감지해 다음 개선 목표를 자동 생성합니다.",
+      pipelineNote: "각 단계는 독립된 claude -p 에이전트입니다. 여기에 더해 Evolver(dramaScore 계산 모듈)가 Observer와 Planner 사이에서 정체를 감지해 다음 개선 목표를 자동 생성합니다. 이 파이프라인 전체는 self-hosted 러너 위에서 사람 트리거 없이 반복 실행됩니다.",
       evolution: [
         {
           phase: "Phase 1",
@@ -67,6 +75,11 @@ const data = {
           phase: "Phase 2",
           title: "Evolver 추가",
           body: "dramaScore(물고기-포식자 상호작용 지표)로 정체를 감지하고 개선 목표를 자동으로 생성했습니다. 사람이 목표를 주던 구조에서, 에이전트가 스스로 다음 목표를 찾는 구조로 옮겨갔습니다.",
+        },
+        {
+          phase: "Phase 3",
+          title: "Always-On Loop",
+          body: "self-hosted 러너를 등록해 루프가 사람 트리거 없이 계속 돌게 했습니다. 매 실행마다 새 머신을 띄우는 CI 방식은 아직 푸시되지 않은 완료 커밋이 유실되고, 사용 한도로 프로세스가 죽으면 다시 깨울 수단이 없어서, 상시 머신에서 한 프로세스가 계속 도는 구조를 택했습니다. 이때부터 rate-limit은 '다음 실행을 못 깨우는 문제'가 아니라 '리셋 시각까지 자면 되는 문제'가 됐습니다.",
         },
       ],
       failureCases: [
@@ -90,6 +103,11 @@ const data = {
           title: "Correctness without Progress",
           body: "REVIEW_PASS가 쌓여도 장면 품질은 제자리였습니다. Correctness Loop는 퇴행을 막을 뿐 진보를 만들지는 못했고, 이것이 Evolver를 도입한 직접적인 계기가 됐습니다.",
         },
+        {
+          type: "Type E",
+          title: "Fake Completion",
+          body: "상시 루프의 러너 로그를 보니 같은 목표가 반복해서 '완료'로 마킹되는데 실제 코드 변경은 0이었습니다. 그 값은 매 프레임 덮어써져 고쳐도 무효였고, 에이전트는 '바꾸지 않는 게 맞다'는 판단을 숨긴 채 완료로 위장하고 있었습니다. 바꾸지 않기로 했다면 이유를 남기고 보류하게 고쳐 가짜 완료와 같은 목표의 무한 재생성을 함께 끊었습니다. 사람이 지켜보지 않는 루프에서는 실패를 정직하게 드러내는 경로가 따로 설계돼야 했습니다.",
+        },
       ],
       lessonsLearned: [
         { n: "01", h: "Evaluation is harder than Generation", d: "평가 기준이 없으면 개선할 목표도 생기지 않습니다." },
@@ -97,11 +115,13 @@ const data = {
         { n: "03", h: "Evaluation systems require evaluation", d: "멀티모달 판정도 바로 합격에 쓰지 않고, 사람 라벨과 대조해 신뢰성부터 측정했습니다." },
         { n: "04", h: "Correctness does not imply progress", d: "퇴행을 막는 루프와 진보를 만드는 루프는 따로 설계해야 합니다." },
         { n: "05", h: "Human judgment remains necessary", d: "자동화할 수 있는 영역과 사람이 필요한 영역의 경계를 분명히 긋는 것이 핵심입니다." },
+        { n: "06", h: "Autonomy is an operations problem", d: "상시로 돌리려면 모델 성능보다 종료 코드 계약·헤드리스 인증·커밋 무결성 같은 운영 설계가 먼저 필요했습니다." },
       ],
       results: [
-        { k: "Review 수행", v: "260+" },
-        { k: "REVIEW_FAIL", v: "99" },
-        { k: "REVIEW_PASS", v: "162" },
+        { k: "Review 수행", v: "470+" },
+        { k: "REVIEW_PASS", v: "361" },
+        { k: "REVIEW_FAIL", v: "59" },
+        { k: "자동 커밋", v: "67" },
       ],
     },
     {
