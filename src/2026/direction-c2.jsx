@@ -965,6 +965,12 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
                   </div>
                 </div>
                 <div>
+                  <div className="lbl">In Production</div>
+                  <div className="val" style={{ fontSize: 13.5, lineHeight: 1.8, color: "var(--x-mute)", fontWeight: 400 }}>
+                    같은 구조를 사내 업무로<br />이슈 → Draft MR
+                  </div>
+                </div>
+                <div>
                   <div className="lbl">Status</div>
                   <div className="val" style={{ color: "var(--x-accent)" }}>● 새로운 기회 탐색 중</div>
                 </div>

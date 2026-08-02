@@ -126,6 +126,9 @@ function buildHTML(data) {
   // 각 케이스는 새 페이지에서 시작하지만, 내부는 '문서'처럼 자연스럽게 흐른다.
   // 섹션 제목+첫 내용은 .sub로 묶어 페이지 끝에서 고아로 잘리지 않게 한다.
   const sub = (inner, extra = '') => `<div class="sub${extra ? ' ' + extra : ''}">${inner}</div>`;
+  // 목록형 섹션(Solution/Failure/Lessons)은 한 페이지를 넘길 수 있으므로 통째로 avoid하지 않는다.
+  // 대신 개별 항목만 쪼개지지 않게 하고, 제목은 첫 항목과 붙여 둔다(.x-section-h{break-after:avoid}).
+  const subFlow = (inner, extra = '') => `<div class="sub sub--flow${extra ? ' ' + extra : ''}">${inner}</div>`;
 
   const renderCase = (c, leadHtml = '') => {
     const blocks = [];
@@ -144,8 +147,9 @@ function buildHTML(data) {
     if (c.challenge) blocks.push(sub(`${sectionH('Challenge')}<p class="body">${esc(c.challenge)}</p>`));
 
     if (c.solution) {
-      // 모든 케이스 Solution은 1열로 흐른다 — 항목 수가 달라도 빈칸 없이 세로로 정렬된다.
-      blocks.push(sub(`${sectionH('Solution')}<div class="sol-grid sol-grid--single">${c.solution.map((s) => `
+      // 기본은 1열(문서처럼 읽힌다). 항목이 많은 케이스만 2열로 접어 한 페이지에 담는다.
+      const dense = c.solution.length >= 7;
+      blocks.push(subFlow(`${sectionH('Solution')}<div class="sol-grid ${dense ? 'sol-grid--two' : 'sol-grid--single'}">${c.solution.map((s) => `
         <div class="sol-item"><div class="sol-h">${esc(s.h)}</div><div class="sol-d">${esc(s.d)}</div></div>`).join('')}</div>`));
     }
 
@@ -160,17 +164,17 @@ function buildHTML(data) {
     }
 
     if (c.evolution) {
-      blocks.push(sub(`${sectionH('Architecture Evolution')}<div class="evo">${c.evolution.map((e) => `
+      blocks.push(subFlow(`${sectionH('Architecture Evolution')}<div class="evo">${c.evolution.map((e) => `
         <div class="evo-item"><div class="evo-phase">${esc(e.phase)}</div><div class="evo-title">${esc(e.title)}</div><div class="sol-d">${esc(e.body)}</div></div>`).join('')}</div>`));
     }
 
     if (c.failureCases) {
-      blocks.push(sub(`${sectionH('Failure Cases')}<div class="fail">${c.failureCases.map((f) => `
+      blocks.push(subFlow(`${sectionH('Failure Cases')}<div class="fail">${c.failureCases.map((f) => `
         <div class="fail-item"><div class="fail-type">${esc(f.type)}</div><div class="fail-title">${esc(f.title)}</div><div class="sol-d">${esc(f.body)}</div></div>`).join('')}</div>`));
     }
 
     if (c.lessonsLearned) {
-      blocks.push(sub(`${sectionH('Lessons Learned')}<div class="lessons">${c.lessonsLearned.map((l) => `
+      blocks.push(subFlow(`${sectionH('Lessons Learned')}<div class="lessons">${c.lessonsLearned.map((l) => `
         <div class="lesson-item"><span class="lesson-n">${esc(l.n)}</span><div><div class="lesson-h">${esc(l.h)}</div><div class="sol-d">${esc(l.d)}</div></div></div>`).join('')}</div>`, 'sub--gap'));
     } else if (c.lessons) {
       blocks.push(sub(`${sectionH('Lessons Learned')}<p class="body">${esc(c.lessons)}</p>`, 'sub--gap'));
@@ -228,9 +232,12 @@ function buildHTML(data) {
   /* 케이스·후반 섹션은 새 페이지에서 시작 (독립 단위) */
   .break-before{ break-before:page; page-break-before:always; }
   /* 섹션 제목+첫 내용 묶음: 페이지 끝에서 고아로 잘리지 않게 */
-  .sub{ margin-top:22px; break-inside:avoid; }
+  .sub{ margin-top:20px; break-inside:avoid; }
+  /* 목록형 섹션은 페이지를 넘겨 이어진다 — 통째로 avoid하면 앞 페이지에 큰 여백이 남는다.
+     쪼개짐 방지는 개별 항목(.sol-item 등)에서 처리한다. */
+  .sub--flow{ break-inside:auto; }
   /* Lessons Learned · Results — 이전 섹션과 좀 더 떼어 놓는다 */
-  .sub--gap{ margin-top:40px; }
+  .sub--gap{ margin-top:26px; }
   .lead{ break-inside:avoid; }
   h2,.x-h2,.x-section-h{ break-after:avoid; }
 
@@ -308,11 +315,11 @@ function buildHTML(data) {
   .contents .toc-row.indent .toc-t{ font-weight:500; font-size:13px; }
 
   /* WORK 도입부 — 첫 프로젝트 위에 얹히고, 아래로 충분한 여백을 둔다. */
-  .work-lead{ margin-bottom:54px; }
+  .work-lead{ margin-bottom:44px; }
 
   /* CASE */
   .case-head{ display:grid; grid-template-columns:auto 1fr; gap:18px; align-items:start;
-    padding-bottom:18px; border-bottom:1px solid var(--x-line); margin-bottom:6px; }
+    padding-bottom:14px; border-bottom:1px solid var(--x-line); margin-bottom:4px; }
   .case-no{ font-size:34px; font-weight:700; color:var(--x-soft); line-height:1; letter-spacing:-.02em; }
   .case-title{ font-size:24px; font-weight:600; letter-spacing:-.02em; }
   .case-sub{ color:var(--x-ink-2); font-size:14px; margin-top:4px; max-width:42em; }
@@ -322,7 +329,10 @@ function buildHTML(data) {
     text-underline-offset:2px; }
 
   .sol-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px 20px; }
-  .sol-grid--single{ grid-template-columns:1fr; gap:16px; }
+  .sol-grid--single{ grid-template-columns:1fr; gap:13px; }
+  .sol-grid--two{ grid-template-columns:1fr 1fr; gap:12px 20px; align-items:start; }
+  /* 2열은 한 줄이 짧아 행간을 조금 좁혀도 읽기 부담이 없다 */
+  .sol-grid--two .sol-d{ font-size:12px; line-height:1.55; }
   .sol-item{ break-inside:avoid; }
   .sol-h{ font-weight:600; font-size:13px; margin-bottom:3px; }
   .sol-d{ color:var(--x-ink-2); font-size:12.5px; line-height:1.6; }
@@ -349,13 +359,13 @@ function buildHTML(data) {
   .lesson-n{ font-size:13px; font-weight:700; color:var(--x-soft); }
   .lesson-h{ font-weight:600; font-size:13px; }
 
-  .stack{ display:flex; flex-wrap:wrap; gap:6px; margin-top:18px; }
+  .stack{ display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; }
 
   /* Results — 카드 형태(연한 배경 + 테두리)로 구분 */
   .metrics{ display:flex; flex-wrap:wrap; gap:12px; }
-  .metric{ flex:1 1 0; min-width:130px; padding:14px 18px;
+  .metric{ flex:1 1 0; min-width:120px; padding:11px 15px;
     border:1px solid var(--x-line); border-radius:8px; background:#faf9f7; }
-  .metric-v{ font-size:20px; font-weight:600; letter-spacing:-.02em; }
+  .metric-v{ font-size:18px; font-weight:600; letter-spacing:-.02em; }
   .metric-k{ font-size:11.5px; margin-top:2px; }
 
   /* CONTACT — 다른 섹션과 동일하게 좌측 상단부터, 연락처는 세로 배열 */
