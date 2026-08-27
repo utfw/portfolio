@@ -1,6 +1,7 @@
 import React from 'react';
+import { VARIANTS, DEFAULT_VARIANT } from './variants.jsx';
 
-const { useState: useStateC2, useEffect: useEffectC2, useRef: useRefC2 } = React;
+const { useState: useStateC2, useEffect: useEffectC2, useRef: useRefC2, useMemo: useMemoC2 } = React;
 
 const C2_SECTIONS = [
 { id: "landing", no: "00", label: "Landing" },
@@ -8,13 +9,79 @@ const C2_SECTIONS = [
 { id: "work", no: "02", label: "Work" },
 { id: "contact", no: "03", label: "Contact" }];
 
+// Bada 상세는 분량이 많아 탭으로 나눕니다.
+const BADA_TABS = [
+{ id: "overview", label: "Overview" },
+{ id: "architecture", label: "Architecture" },
+{ id: "failures", label: "Failure Analysis" },
+{ id: "lessons", label: "Lessons" }];
 
-export default function DirectionC2({ data, accent = "#9b3a2a" }) {
+// 렌더 중 정의하면 매 렌더마다 remount되므로 컴포넌트 밖에 둡니다.
+function VariantSwitch({ current, onChange, compact }) {
+  return (
+    <div className={"x-vswitch" + (compact ? " compact" : "")} role="group" aria-label="포트폴리오 버전 선택">
+      {Object.values(VARIANTS).map((item) =>
+        <button
+          key={item.id}
+          type="button"
+          className={item.id === current ? "on" : ""}
+          aria-pressed={item.id === current}
+          onClick={() => onChange && onChange(item.id)}>
+          {item.label}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// 케이스 상세 본문 (Solution / Results / Stack) — 아코디언과 Featured가 공유
+function CaseDetail({ c }) {
+  return (
+    <>
+      <div className="x-section-h">Solution</div>
+      <div style={{ marginBottom: 28 }}>
+        {c.solution.map((s, i) =>
+          <div key={i} className="x-sol">
+            <h4>{s.h}</h4>
+            <p>{s.d}</p>
+          </div>
+        )}
+      </div>
+
+      {c.metrics &&
+      <>
+        <div className="x-section-h">Results</div>
+        <div className="x-results-grid" style={{ marginBottom: 28 }}>
+          {c.metrics.map((m, i) =>
+            <div key={i} className="x-metric text">
+              <div className="k">{m.k}</div>
+              <div className="v">{m.v}</div>
+            </div>
+          )}
+        </div>
+      </>
+      }
+
+      {c.stack &&
+      <div className="x-stack-row">
+        <span className="x-stack-lbl">Stack</span>
+        <div>{c.stack.map((s) => <span key={s} className="x-pill">{s}</span>)}</div>
+      </div>
+      }
+    </>
+  );
+}
+
+
+export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariantChange }) {
   const [section, setSection] = useStateC2("landing");
   const [expandedCase, setExpandedCase] = useStateC2(null); // 아코디언으로 펼친 케이스 id
+  const [badaTab, setBadaTab] = useStateC2("overview");
   const [slideDir, setSlideDir] = useStateC2(0); // -1: 왼쪽에서, 1: 오른쪽에서
   const [animKey, setAnimKey] = useStateC2(0);
   const scrollRef = useRefC2(null);
+
+  const v = VARIANTS[variant] || VARIANTS[DEFAULT_VARIANT];
 
   const sectionIdx = C2_SECTIONS.findIndex((s) => s.id === section);
   const current = C2_SECTIONS[sectionIdx];
@@ -31,23 +98,15 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
     });
   };
 
-  // 인접 섹션으로 한 칸 이동 (좌우 제스처용). 양 끝에서는 멈춤.
-  const goStep = useRefC2(null);
-  goStep.current = (dir) => {
-    setSection((cur) => {
-      const curIdx = C2_SECTIONS.findIndex((s) => s.id === cur);
-      const nextIdx = curIdx + dir;
-      if (nextIdx < 0 || nextIdx >= C2_SECTIONS.length) return cur;
-      setSlideDir(dir);
-      setAnimKey((k) => k + 1);
-      setExpandedCase(null);
-      return C2_SECTIONS[nextIdx].id;
-    });
-  };
-
   useEffectC2(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
-  }, [section]);
+  }, [section, variant]);
+
+  // variant가 바뀌면 펼쳐둔 상태를 초기화 (다른 케이스 목록이므로)
+  useEffectC2(() => {
+    setExpandedCase(null);
+    setBadaTab("overview");
+  }, [variant]);
 
   // ---- 좌우 제스처: 트랙패드 가로 스크롤 + Shift+휠 ----
   useEffectC2(() => {
@@ -60,6 +119,20 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
     let locked = false;
     let accum = 0;
     let idleTimer = null;
+
+    // 인접 섹션으로 한 칸 이동. 양 끝에서는 멈춤.
+    // setSection이 함수형 업데이트라 최신 state를 클로저로 붙잡을 필요가 없습니다.
+    const goStep = (dir) => {
+      setSection((cur) => {
+        const curIdx = C2_SECTIONS.findIndex((s) => s.id === cur);
+        const nextIdx = curIdx + dir;
+        if (nextIdx < 0 || nextIdx >= C2_SECTIONS.length) return cur;
+        setSlideDir(dir);
+        setAnimKey((k) => k + 1);
+        setExpandedCase(null);
+        return C2_SECTIONS[nextIdx].id;
+      });
+    };
 
     const scheduleIdle = (delay) => {
       if (idleTimer) window.clearTimeout(idleTimer);
@@ -83,31 +156,59 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
       if (Math.abs(accum) > 90) {
         locked = true;
         accum = 0;
-        goStep.current(dx > 0 ? 1 : -1);
+        goStep(dx > 0 ? 1 : -1);
       }
     };
 
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => {
       el.removeEventListener("wheel", onWheel);
-      if (timer) window.clearTimeout(timer);
+      if (idleTimer) window.clearTimeout(idleTimer);
     };
   }, []);
 
+  // 뉴트럴 팔레트 — 흰 배경 + 그레이 스케일, 액센트는 소량만.
   const vars = {
-    "--x-bg": "#fbf9f4",
-    "--x-bg-2": "#f2eee4",
-    "--x-ink": "#171717",
-    "--x-ink-2": "#2a2823",
-    "--x-mute": "#7c7a74",
-    "--x-soft": "#bcb9b1",
-    "--x-line": "#e1dac8",
-    "--x-line-2": "#ece6d6",
-    "--x-accent": accent,
-    "--x-sans": "'Noto Sans KR', 'Noto Sans', system-ui, sans-serif"
+    "--x-bg": "#ffffff",
+    "--x-bg-2": "#f6f7f8",
+    "--x-bg-3": "#eef0f2",
+    "--x-ink": "#14171a",
+    "--x-ink-2": "#3d4348",
+    "--x-mute": "#6b7280",
+    "--x-soft": "#9ca3af",
+    "--x-line": "#e3e6e9",
+    "--x-line-2": "#eef0f2",
+    "--x-accent": "#1257c7",
+    "--x-sans": "'Noto Sans KR', 'Noto Sans', system-ui, -apple-system, sans-serif",
+    "--x-mono": "ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace"
   };
 
-  const cases = [...data.caseStudies].sort((a, b) => a.number.localeCompare(b.number));
+  // variant의 caseOrder대로 정렬. 목록에 없는 케이스는 원래 순서로 뒤에 붙임.
+  const cases = useMemoC2(() => {
+    const order = v.caseOrder || [];
+    const rank = (c) => {
+      const i = order.indexOf(c.id);
+      return i === -1 ? order.length + Number(c.number) : i;
+    };
+    // 표시 번호는 variant 순서에 맞춰 다시 매깁니다 (data의 number는 고정값이라 순서와 어긋남).
+    return [...data.caseStudies]
+      .sort((a, b) => rank(a) - rank(b))
+      .map((c, i) => ({ ...c, number: String(i + 1).padStart(2, "0") }));
+  }, [data.caseStudies, v.caseOrder]);
+
+  // variant의 skillOrder대로 Skills 재정렬
+  const skillEntries = useMemoC2(() => {
+    const order = v.skillOrder || [];
+    return Object.entries(data.skills).sort((a, b) => {
+      const ia = order.indexOf(a[0]), ib = order.indexOf(b[0]);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+  }, [data.skills, v.skillOrder]);
+
+  const featured = cases.find((c) => c.id === v.featuredId) || cases[0];
+  const others = cases.filter((c) => c.id !== featured.id);
+
+  const vswitch = (compact) => <VariantSwitch current={v.id} onChange={onVariantChange} compact={compact} />;
 
   return (
     <div className="dirX" style={vars}>
@@ -118,7 +219,7 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
           color: var(--x-ink);
           font-family: var(--x-sans);
           font-size: 16px;
-          line-height: 1.78;
+          line-height: 1.75;
           font-weight: 400;
           display: grid;
           grid-template-rows: auto 1fr auto;
@@ -129,6 +230,10 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
         .dirX a { color: inherit; text-decoration: none; transition: color .15s; }
         .dirX a:hover { color: var(--x-accent); }
         .dirX p { text-wrap: pretty; }
+        .dirX *:focus-visible {
+          outline: 2px solid var(--x-accent);
+          outline-offset: 2px;
+        }
 
         /* ---------- HEADER ---------- */
         .x-header {
@@ -139,27 +244,27 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
           max-width: 1180px;
           width: 100%;
           margin: 0 auto;
-          padding: 18px 64px;
+          padding: 16px 64px;
           display: grid;
           grid-template-columns: auto 1fr auto;
           gap: 40px;
           align-items: center;
         }
         .x-brand {
-          font-size: 16px;
+          font-size: 15.5px;
           font-weight: 600;
           letter-spacing: -.008em;
+          display: flex; align-items: baseline; gap: 10px;
         }
         .x-brand .sub {
-          margin-left: 10px;
-          font-size: 13px;
+          font-size: 12.5px;
           color: var(--x-mute);
           font-weight: 400;
           letter-spacing: 0;
         }
         .x-nav {
           display: flex;
-          gap: 28px;
+          gap: 26px;
           justify-content: center;
         }
         .x-nav button {
@@ -175,21 +280,51 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
         .x-nav button.active { color: var(--x-ink); font-weight: 500; }
         .x-nav button.active::after {
           content: ''; position: absolute;
-          left: 50%; bottom: -2px;
-          transform: translateX(-50%);
-          width: 4px; height: 4px; border-radius: 50%;
+          left: 0; right: 0; bottom: -1px;
+          height: 2px;
           background: var(--x-accent);
+        }
+        .x-head-right {
+          display: flex; align-items: center; gap: 16px;
         }
         .x-status {
-          font-size: 13px;
+          font-size: 12.5px;
           color: var(--x-mute);
-          display: flex; align-items: center; gap: 8px;
+          display: flex; align-items: center; gap: 7px;
           letter-spacing: 0;
+          white-space: nowrap;
         }
         .x-status .dot {
-          width: 7px; height: 7px; border-radius: 50%;
-          background: var(--x-accent);
+          width: 6px; height: 6px; border-radius: 50%;
+          background: #16a34a;
         }
+
+        /* ---------- VARIANT SWITCH ---------- */
+        .x-vswitch {
+          display: inline-flex;
+          border: 1px solid var(--x-line);
+          border-radius: 3px;
+          overflow: hidden;
+          flex: 0 0 auto;
+        }
+        .x-vswitch button {
+          all: unset;
+          cursor: pointer;
+          padding: 6px 14px;
+          font-size: 12.5px;
+          font-weight: 500;
+          color: var(--x-mute);
+          letter-spacing: -.002em;
+          transition: background .15s, color .15s;
+          white-space: nowrap;
+        }
+        .x-vswitch button + button { border-left: 1px solid var(--x-line); }
+        .x-vswitch button:hover { background: var(--x-bg-2); color: var(--x-ink); }
+        .x-vswitch button.on {
+          background: var(--x-ink);
+          color: #fff;
+        }
+        .x-vswitch.compact button { padding: 5px 11px; font-size: 12px; }
 
         /* ---------- MAIN (top-aligned, scrollable) ---------- */
         .x-main {
@@ -202,12 +337,12 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
         }
         .x-frame {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) 280px;
-          gap: 80px;
+          grid-template-columns: minmax(0, 1fr) 260px;
+          gap: 72px;
           width: 100%;
           max-width: 1180px;
           margin: 0 auto;
-          padding: 48px 0;
+          padding: 48px 0 72px;
           flex-shrink: 0;
           align-items: start;
         }
@@ -216,113 +351,130 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
 
         /* ---------- TYPE ---------- */
         .x-eyebrow {
-          font-size: 11.5px;
-          letter-spacing: .24em;
+          font-size: 11px;
+          letter-spacing: .2em;
           text-transform: uppercase;
           color: var(--x-mute);
-          font-weight: 500;
-          margin-bottom: 22px;
-          display: flex; align-items: center; gap: 14px;
+          font-weight: 600;
+          margin-bottom: 20px;
+          display: flex; align-items: center; gap: 12px;
         }
         .x-eyebrow b {
           color: var(--x-accent);
-          font-weight: 500;
-          letter-spacing: .12em;
+          font-weight: 600;
+          letter-spacing: .1em;
         }
         .x-eyebrow .bar {
-          flex: 0 0 28px; height: 1px;
+          flex: 0 0 24px; height: 2px;
           background: var(--x-accent);
-          opacity: .6;
         }
 
         .x-h1 {
-          font-family: var(--x-sans);
-          font-weight: 500;
-          font-size: 46px;
-          line-height: 1.16;
-          letter-spacing: -.03em;
-          margin: 0 0 24px;
+          font-weight: 600;
+          font-size: 44px;
+          line-height: 1.18;
+          letter-spacing: -.032em;
+          margin: 0 0 20px;
         }
         .x-h1 .em { color: var(--x-mute); font-weight: 400; }
         .x-h2 {
-          font-family: var(--x-sans);
-          font-weight: 500;
-          font-size: 32px;
-          line-height: 1.22;
-          letter-spacing: -.026em;
-          margin: 0 0 20px;
+          font-weight: 600;
+          font-size: 30px;
+          line-height: 1.26;
+          letter-spacing: -.028em;
+          margin: 0 0 18px;
         }
         .x-lede {
-          font-size: 18px;
-          line-height: 1.65;
+          font-size: 17.5px;
+          line-height: 1.68;
           color: var(--x-ink-2);
           letter-spacing: -.008em;
           margin: 0 0 28px;
-          max-width: 34em;
-          font-weight: 400;
+          max-width: 36em;
         }
         .x-section-h {
-          font-size: 11.5px;
-          letter-spacing: .24em;
+          font-size: 11px;
+          letter-spacing: .2em;
           text-transform: uppercase;
           color: var(--x-mute);
-          font-weight: 500;
-          margin: 0 0 18px;
+          font-weight: 600;
+          margin: 0 0 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--x-line);
         }
-        .x-rule { height: 1px; background: var(--x-line); border: 0; margin: 36px 0; }
+        .x-section-h.plain { border-bottom: 0; padding-bottom: 0; }
 
         /* ---------- SLIDE ANIMATION ---------- */
         @keyframes slideInFromRight {
-          from { opacity: 0; transform: translateX(48px); }
+          from { opacity: 0; transform: translateX(40px); }
           to   { opacity: 1; transform: translateX(0); }
         }
         @keyframes slideInFromLeft {
-          from { opacity: 0; transform: translateX(-48px); }
+          from { opacity: 0; transform: translateX(-40px); }
           to   { opacity: 1; transform: translateX(0); }
         }
-        .x-slide-right { animation: slideInFromRight .32s cubic-bezier(.22,.61,.36,1) both; }
-        .x-slide-left  { animation: slideInFromLeft  .32s cubic-bezier(.22,.61,.36,1) both; }
+        .x-slide-right { animation: slideInFromRight .3s cubic-bezier(.22,.61,.36,1) both; }
+        .x-slide-left  { animation: slideInFromLeft  .3s cubic-bezier(.22,.61,.36,1) both; }
+        @media (prefers-reduced-motion: reduce) {
+          .x-slide-right, .x-slide-left, .x-acc-body { animation: none !important; }
+          .dirX * { transition: none !important; }
+        }
 
         /* ---------- SIDE COLUMN ---------- */
         .x-side {
-          font-size: 13.5px;
+          font-size: 13px;
           color: var(--x-mute);
-          line-height: 1.72;
-          display: grid; gap: 22px;
-          padding-left: 40px;
+          line-height: 1.7;
+          display: grid; gap: 20px;
+          padding-left: 32px;
           border-left: 1px solid var(--x-line);
+          position: sticky;
+          top: 0;
         }
         .x-side .lbl {
-          font-size: 10.5px;
-          letter-spacing: .22em;
+          font-size: 10px;
+          letter-spacing: .2em;
           text-transform: uppercase;
           color: var(--x-soft);
-          margin-bottom: 8px;
-          font-weight: 500;
+          margin-bottom: 6px;
+          font-weight: 600;
         }
-        .x-side .val { color: var(--x-ink); font-size: 14.5px; font-weight: 400; letter-spacing: -.005em; }
-        .x-side .val b { font-weight: 600; }
+        .x-side .val {
+          color: var(--x-ink-2);
+          font-size: 13.5px;
+          line-height: 1.65;
+          letter-spacing: -.004em;
+          white-space: pre-line;
+        }
+        .x-side .val b { font-weight: 600; color: var(--x-ink); }
 
         /* ---------- DL ---------- */
         .x-dl { margin: 0; }
         .x-dl-row {
-          display: grid; grid-template-columns: 160px 1fr;
-          gap: 26px;
-          padding: 18px 0;
-          border-bottom: 1px solid var(--x-line);
+          display: grid; grid-template-columns: 150px 1fr;
+          gap: 24px;
+          padding: 16px 0;
+          border-bottom: 1px solid var(--x-line-2);
           align-items: baseline;
         }
         .x-dl-row:first-of-type { border-top: 1px solid var(--x-line); }
+        .x-dl-row:last-of-type { border-bottom: 1px solid var(--x-line); }
+        /* 섹션 헤딩(밑줄 있음) 바로 뒤에 오는 블록은 자기 윗선을 지운다 — 이중선 방지 */
+        .x-section-h + .x-dl .x-dl-row:first-of-type,
+        .x-section-h + .x-acc-list .x-acc:first-of-type,
+        .x-section-h + * > .x-sol:first-child,
+        .x-section-h + .x-focus .x-focus-item:first-child,
+        .x-section-h + .x-sol { border-top: 0; }
         .x-dl-row dt {
-          font-size: 11.5px;
-          letter-spacing: .18em;
+          font-size: 11px;
+          letter-spacing: .14em;
           text-transform: uppercase;
           color: var(--x-mute);
-          font-weight: 500;
+          font-weight: 600;
         }
         .x-dl-row dd {
           margin: 0;
-          font-size: 15.5px;
+          font-size: 15px;
           line-height: 1.7;
           letter-spacing: -.003em;
         }
@@ -332,57 +484,62 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
         .x-exp-head {
           display: flex; align-items: baseline; justify-content: space-between;
           gap: 16px;
-          padding-bottom: 16px;
+          padding-bottom: 14px;
           border-bottom: 1px solid var(--x-line);
         }
-        .x-exp-head b { font-weight: 600; font-size: 16.5px; letter-spacing: -.008em; }
-        .x-exp-head .role { color: var(--x-mute); font-size: 14.5px; margin-left: 6px; }
+        .x-exp-head b { font-weight: 600; font-size: 16px; letter-spacing: -.008em; }
+        .x-exp-head .role { color: var(--x-mute); font-size: 14px; margin-left: 8px; }
         .x-exp-period {
-          font-size: 12.5px; color: var(--x-mute);
+          font-size: 12px; color: var(--x-mute);
           letter-spacing: .02em; white-space: nowrap;
+          font-variant-numeric: tabular-nums;
         }
-        .x-timeline { list-style: none; margin: 4px 0 0; padding: 0; }
+        .x-timeline { list-style: none; margin: 2px 0 0; padding: 0; }
         .x-timeline li {
-          display: grid; grid-template-columns: 72px 1fr; gap: 20px;
-          padding: 12px 0; align-items: baseline;
+          display: grid; grid-template-columns: 76px 1fr; gap: 20px;
+          padding: 11px 0; align-items: baseline;
           font-size: 14.5px; line-height: 1.6;
           border-bottom: 1px solid var(--x-line-2);
         }
         .x-timeline li:last-child { border-bottom: 0; }
-        .x-timeline .t-date { font-size: 12.5px; color: var(--x-mute); letter-spacing: .02em; }
+        .x-timeline .t-date {
+          font-size: 12px; color: var(--x-mute); letter-spacing: .02em;
+          font-variant-numeric: tabular-nums;
+          font-family: var(--x-mono);
+        }
         .x-timeline li.now .t-date { color: var(--x-accent); }
         .x-timeline li.now b { color: var(--x-accent); font-weight: 600; }
 
-        /* ---------- PILL (square, editorial) ---------- */
+        /* ---------- PILL ---------- */
         .x-pill {
           display: inline-block;
-          padding: 5px 12px;
-          font-size: 12.5px;
+          padding: 4px 10px;
+          font-size: 12px;
           background: var(--x-bg-2);
-          color: var(--x-ink);
+          border: 1px solid var(--x-line);
+          border-radius: 3px;
+          color: var(--x-ink-2);
           margin: 3px 5px 3px 0;
           letter-spacing: -.002em;
+          white-space: nowrap;
         }
-        .x-pill:hover {
-          background: var(--x-ink);
-          color: var(--x-bg);
-          cursor: default;
-        }
-        /* ---------- BUTTON (square) ---------- */
+        /* ---------- BUTTON ---------- */
         .x-btn {
           all: unset; cursor: pointer;
-          padding: 13px 24px;
+          padding: 11px 22px;
           font-size: 14px;
           font-weight: 500;
           color: var(--x-ink);
-          border: 1px solid var(--x-ink);
+          border: 1px solid var(--x-line);
+          border-radius: 3px;
           letter-spacing: -.005em;
           transition: background .15s, color .15s, border-color .15s;
         }
-        .x-btn:hover { background: var(--x-ink); color: var(--x-bg); }
+        .x-btn:hover { background: var(--x-bg-2); border-color: var(--x-soft); }
         .x-btn-primary {
           background: var(--x-ink);
-          color: var(--x-bg);
+          border-color: var(--x-ink);
+          color: #fff;
         }
         .x-btn-primary:hover {
           background: var(--x-accent);
@@ -390,140 +547,147 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
           color: #fff;
         }
 
-        /* ---------- CASE ---------- */
-        .x-case {
-          display: grid;
-          grid-template-columns: 64px 1fr auto;
-          gap: 24px;
-          padding: 30px 0;
+        /* ---------- FEATURED CARD ---------- */
+        .x-feat {
+          border: 1px solid var(--x-line);
+          border-radius: 4px;
+          overflow: hidden;
+        }
+        .x-feat-head {
+          padding: 22px 26px;
+          background: var(--x-bg-2);
           border-bottom: 1px solid var(--x-line);
-          cursor: pointer;
-          align-items: baseline;
-          transition: background .18s, padding .18s;
         }
-        .x-case:first-of-type { border-top: 1px solid var(--x-line); }
-        .x-case:hover {
-          background: var(--x-bg-2);
-          padding-left: 18px;
-          padding-right: 18px;
+        .x-feat-badges {
+          display: flex; flex-wrap: wrap; align-items: center;
+          gap: 10px; margin-bottom: 12px;
         }
-        .x-case:hover .x-case-arrow {
-          color: var(--x-accent);
-          transform: translateX(4px);
+        .x-badge {
+          font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+          font-weight: 600; padding: 3px 8px; border-radius: 2px;
+          background: var(--x-accent); color: #fff;
         }
-        .x-case:hover .x-case-title {
-          color: var(--x-accent);
+        .x-badge.ghost {
+          background: transparent; color: var(--x-mute);
+          border: 1px solid var(--x-line); font-weight: 500;
         }
-        .x-case-no {
-          font-size: 13px;
-          color: var(--x-accent);
-          font-weight: 500;
-          letter-spacing: .12em;
+        .x-feat-title {
+          font-size: 25px; font-weight: 600;
+          letter-spacing: -.024em; margin-bottom: 8px;
         }
-        .x-case-title {
-          font-size: 24px;
-          font-weight: 500;
-          letter-spacing: -.022em;
-          line-height: 1.25;
-          transition: color .18s;
+        .x-feat-sub {
+          font-size: 15px; color: var(--x-mute);
+          line-height: 1.65; margin: 0;
         }
-        .x-case-sub {
-          margin-top: 6px;
-          font-size: 14.5px;
+        .x-feat-body { padding: 26px; }
+
+        /* ---------- TABS ---------- */
+        .x-tabs {
+          display: flex; gap: 2px;
+          border-bottom: 1px solid var(--x-line);
+          margin-bottom: 26px;
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+        .x-tabs::-webkit-scrollbar { display: none; }
+        .x-tabs button {
+          all: unset; cursor: pointer;
+          padding: 10px 16px;
+          font-size: 13.5px; font-weight: 500;
           color: var(--x-mute);
-          line-height: 1.6;
-          letter-spacing: -.003em;
+          border-bottom: 2px solid transparent;
+          margin-bottom: -1px;
+          white-space: nowrap;
+          transition: color .15s, border-color .15s;
         }
-        .x-case-meta {
-          margin-top: 14px;
-          font-size: 12.5px;
-          color: var(--x-mute);
-          letter-spacing: .01em;
+        .x-tabs button:hover { color: var(--x-ink); }
+        .x-tabs button.on {
+          color: var(--x-accent);
+          border-bottom-color: var(--x-accent);
         }
-        .x-case-meta b { color: var(--x-ink); font-weight: 500; }
-        .x-case-arrow {
-          font-size: 18px;
-          color: var(--x-soft);
-          transition: color .15s, transform .15s;
-        }
-        .x-case-feat {
-          background: var(--x-bg-2);
-          border-left: 3px solid var(--x-accent);
-          padding-left: 15px;
-        }
-        .x-case-feat:hover { padding-left: 22px; }
 
         /* ---------- PIPELINE DIAGRAM ---------- */
         .x-pipe {
           display: flex;
           align-items: stretch;
-          gap: 4px;
-          background: var(--x-bg-2);
-          padding: 24px 20px;
+          gap: 0;
+          border: 1px solid var(--x-line);
+          border-radius: 4px;
           margin: 0 0 14px;
           overflow-x: auto;
         }
         .x-pipe-stage {
           flex: 1 1 0;
-          min-width: 96px;
+          min-width: 128px;
           display: flex;
           flex-direction: column;
-          gap: 8px;
-          padding: 4px 6px;
+          gap: 7px;
+          padding: 18px 16px;
+        }
+        .x-pipe-stage + .x-pipe-stage { border-left: 1px solid var(--x-line); }
+        .x-pipe-idx {
+          font-size: 10px; font-weight: 600;
+          letter-spacing: .14em; color: var(--x-soft);
+          font-family: var(--x-mono);
         }
         .x-pipe-name {
-          font-size: 14px;
+          font-size: 14.5px;
           font-weight: 600;
           letter-spacing: -.01em;
           color: var(--x-ink);
         }
         .x-pipe-tool {
-          font-family: ui-monospace, 'JetBrains Mono', monospace;
-          font-size: 11px;
-          letter-spacing: .02em;
+          font-family: var(--x-mono);
+          font-size: 10.5px;
+          letter-spacing: .01em;
           color: var(--x-accent);
+          background: var(--x-bg-2);
+          border: 1px solid var(--x-line);
+          border-radius: 2px;
+          padding: 2px 6px;
+          align-self: flex-start;
         }
         .x-pipe-rows {
           display: flex;
           flex-direction: column;
-          gap: 3px;
-          margin-top: 2px;
+          gap: 2px;
+          margin-top: 4px;
           padding-top: 8px;
-          border-top: 1px solid var(--x-line);
+          border-top: 1px solid var(--x-line-2);
           font-size: 12px;
           line-height: 1.5;
           color: var(--x-mute);
         }
-        .x-pipe-arrow {
-          flex: 0 0 auto;
-          align-self: center;
-          color: var(--x-soft);
-          font-size: 15px;
-          padding: 0 2px;
-        }
-        .x-pipe-note {
-          margin: 0 0 32px;
-          padding-left: 14px;
-          border-left: 2px solid var(--x-line);
+        .x-note {
+          margin: 0 0 28px;
+          padding: 12px 16px;
+          background: var(--x-bg-2);
+          border-left: 2px solid var(--x-soft);
+          border-radius: 0 3px 3px 0;
           font-size: 13px;
           line-height: 1.7;
-          color: var(--x-mute);
+          color: var(--x-ink-2);
           letter-spacing: -.003em;
         }
 
         /* ---------- ACCORDION ---------- */
-        .x-acc { border-bottom: 1px solid var(--x-line); }
+        .x-acc { border-bottom: 1px solid var(--x-line-2); }
         .x-acc:first-of-type { border-top: 1px solid var(--x-line); }
+        .x-acc.open { background: var(--x-bg-2); }
         .x-acc-head {
+          all: unset;
+          box-sizing: border-box;
           display: grid;
-          grid-template-columns: 64px 1fr auto;
-          gap: 24px;
-          padding: 30px 0;
+          width: 100%;
+          grid-template-columns: 48px 1fr auto;
+          gap: 20px;
+          padding: 22px 16px;
           cursor: pointer;
           align-items: baseline;
+          transition: background .15s;
         }
+        .x-acc-head:hover { background: var(--x-bg-2); }
         .x-acc-head:hover .x-case-title { color: var(--x-accent); }
-        .x-acc-head:hover .x-acc-chevron { color: var(--x-accent); }
         .x-acc.open .x-case-title { color: var(--x-accent); }
         .x-acc-chevron {
           color: var(--x-soft);
@@ -535,165 +699,153 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
           color: var(--x-accent);
           transform: rotate(180deg);
         }
-        /* hover peek — 펼쳐질 내용을 한 줄 미리 보여줌 */
-        .x-acc-peek {
-          max-height: 0;
-          opacity: 0;
-          overflow: hidden;
-          margin-top: 0;
-          font-size: 13.5px;
-          line-height: 1.6;
+        .x-case-no {
+          font-size: 12px;
+          color: var(--x-soft);
+          font-weight: 600;
+          letter-spacing: .1em;
+          font-family: var(--x-mono);
+        }
+        .x-case-title {
+          font-size: 20px;
+          font-weight: 600;
+          letter-spacing: -.02em;
+          line-height: 1.3;
+          transition: color .18s;
+        }
+        .x-case-sub {
+          margin-top: 5px;
+          font-size: 14px;
           color: var(--x-mute);
+          line-height: 1.6;
           letter-spacing: -.003em;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          transition: max-height .25s ease, opacity .2s ease, margin-top .25s ease;
         }
-        .x-acc-head:hover .x-acc-peek {
-          max-height: 3.4em;
-          opacity: 1;
-          margin-top: 14px;
-        }
-        .x-acc-peek-label {
-          display: inline-block;
-          margin-right: 10px;
-          font-size: 10px;
-          letter-spacing: .18em;
-          text-transform: uppercase;
-          color: var(--x-accent);
-          font-weight: 500;
+        .x-case-meta {
+          margin-top: 10px;
+          font-size: 12px;
+          color: var(--x-mute);
+          letter-spacing: .01em;
+          display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
         }
         .x-acc-body {
           overflow: hidden;
-          animation: accOpen .32s cubic-bezier(.22,.61,.36,1);
+          animation: accOpen .3s cubic-bezier(.22,.61,.36,1);
         }
         .x-acc-grid {
-          padding: 4px 18px 36px;
-          border-left: 2px solid var(--x-line-2);
-          margin-left: 18px;
+          padding: 4px 16px 32px 68px;
         }
         @keyframes accOpen {
-          from { opacity: 0; transform: translateY(-8px); }
+          from { opacity: 0; transform: translateY(-6px); }
           to   { opacity: 1; transform: translateY(0); }
         }
 
-        /* ---------- FOCUS LIST (index) ---------- */
-        .x-focus {
-          list-style: none; margin: 0; padding: 0;
-          display: grid; gap: 16px;
-        }
-        .x-focus-item {
+        /* ---------- SOLUTION ROWS ---------- */
+        .x-sol {
+          padding: 18px 0;
+          border-top: 1px solid var(--x-line-2);
           display: grid;
-          grid-template-columns: 36px 1fr;
-          gap: 18px;
+          grid-template-columns: 210px 1fr;
+          gap: 26px;
           align-items: baseline;
         }
-        .x-focus-item .n {
-          font-size: 13px;
-          color: var(--x-accent);
-          font-weight: 500;
-          letter-spacing: .08em;
-        }
-        .x-focus-item .h {
-          font-size: 17px;
+        .x-sol:last-child { border-bottom: 1px solid var(--x-line-2); }
+        .x-sol h4 {
+          margin: 0;
+          font-size: 14.5px;
           font-weight: 600;
           letter-spacing: -.008em;
-          margin-bottom: 4px;
+          line-height: 1.5;
+        }
+        .x-sol h4 .ph {
+          color: var(--x-accent); font-size: 10.5px;
+          letter-spacing: .12em; display: block; margin-bottom: 3px;
+          font-weight: 600; font-family: var(--x-mono);
+        }
+        .x-sol p {
+          margin: 0;
+          font-size: 14.5px;
+          line-height: 1.78;
+          color: var(--x-ink-2);
+        }
+
+        /* ---------- LESSONS ---------- */
+        .x-focus { list-style: none; margin: 0; padding: 0; }
+        .x-focus-item {
+          display: grid;
+          grid-template-columns: 34px 1fr;
+          gap: 16px;
+          align-items: baseline;
+          padding: 14px 0;
+          border-bottom: 1px solid var(--x-line-2);
+        }
+        .x-focus-item:first-child { border-top: 1px solid var(--x-line-2); }
+        .x-focus-item .n {
+          font-size: 12px;
+          color: var(--x-soft);
+          font-weight: 600;
+          letter-spacing: .08em;
+          font-family: var(--x-mono);
+        }
+        .x-focus-item .h {
+          font-size: 15px;
+          font-weight: 600;
+          letter-spacing: -.008em;
+          margin-bottom: 3px;
         }
         .x-focus-item .d {
-          font-size: 14.5px;
+          font-size: 14px;
           color: var(--x-mute);
           line-height: 1.65;
           letter-spacing: -.003em;
         }
 
-        /* ---------- ARCHIVE ---------- */
-        .x-arc {
+        /* ---------- METRICS ---------- */
+        .x-results-grid {
           display: grid;
-          grid-template-columns: 32px 220px 1fr;
-          gap: 20px;
-          padding: 16px 0;
-          border-bottom: 1px solid var(--x-line);
-          font-size: 15px;
-          line-height: 1.5;
-          align-items: baseline;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 1px;
+          background: var(--x-line);
+          border: 1px solid var(--x-line);
+          border-radius: 4px;
+          overflow: hidden;
         }
-        .x-arc:first-of-type { border-top: 1px solid var(--x-line); }
-        .x-arc-no { color: var(--x-soft); font-size: 13px; }
-        .x-arc-name { font-weight: 600; letter-spacing: -.005em; }
-        .x-arc-note { color: var(--x-mute); font-size: 14px; }
-
-        /* ---------- AI FEATURE CARDS (ruled rows, consistent with .x-case) ---------- */
-        .x-ai-grid {
-          margin-top: 4px;
+        .x-metric {
+          padding: 16px 18px;
+          background: var(--x-bg);
+          display: flex; flex-direction: column; gap: 6px;
         }
-        .x-ai-card {
-          display: grid;
-          grid-template-columns: 64px 1fr auto;
-          gap: 24px;
-          padding: 30px 0;
-          align-items: baseline;
-          border-bottom: 1px solid var(--x-line);
-          cursor: pointer;
-          transition: background .18s, padding .18s;
-        }
-        .x-ai-card:first-of-type { border-top: 1px solid var(--x-line); }
-        .x-ai-card:hover {
-          background: var(--x-bg-2);
-          padding-left: 18px;
-          padding-right: 18px;
-        }
-        .x-ai-card:hover .x-ai-arrow { color: var(--x-accent); transform: translateX(4px); }
-        .x-ai-card:hover .x-ai-title { color: var(--x-accent); }
-        .x-ai-no {
-          font-size: 13px; font-weight: 500;
-          color: var(--x-accent); letter-spacing: .12em;
-        }
-        .x-ai-titlerow {
-          display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
-        }
-        .x-ai-title {
-          font-size: 24px; font-weight: 500;
-          letter-spacing: -.022em; line-height: 1.25;
-          transition: color .18s;
-        }
-        .x-ai-tag {
-          font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
-          color: var(--x-bg); background: var(--x-accent);
-          padding: 3px 9px; font-weight: 500;
-        }
-        .x-ai-year {
-          font-size: 12px; color: var(--x-mute); letter-spacing: .04em;
-        }
-        .x-ai-arrow {
-          font-size: 18px; color: var(--x-soft);
-          transition: color .15s, transform .15s;
-        }
-        .x-ai-sub {
-          margin-top: 7px;
-          font-size: 14.5px; color: var(--x-mute); line-height: 1.6;
-          letter-spacing: -.004em;
-        }
-        .x-ai-metrics {
-          display: flex; flex-wrap: wrap; gap: 28px;
-          margin-top: 16px;
-          padding-top: 16px;
-          border-top: 1px solid var(--x-line);
-        }
-        .x-ai-metric .k {
-          font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
+        .x-metric .k {
+          font-size: 10.5px;
+          letter-spacing: .16em;
+          text-transform: uppercase;
           color: var(--x-mute);
+          font-weight: 600;
         }
-        .x-ai-metric .v {
-          margin-top: 5px;
-          font-size: 19px; font-weight: 600; color: var(--x-accent);
-          letter-spacing: -.015em;
+        .x-metric .v {
+          font-size: 22px;
+          font-weight: 600;
+          color: var(--x-ink);
+          letter-spacing: -.02em;
+          font-variant-numeric: tabular-nums;
+          line-height: 1.2;
         }
-        .x-ai-stack {
-          display: flex; flex-wrap: wrap; gap: 6px;
-          margin-top: 16px;
+        .x-metric.text .v {
+          font-size: 15px;
+          letter-spacing: -.005em;
+          line-height: 1.4;
         }
+
+        /* ---------- STACK ROW ---------- */
+        .x-stack-row {
+          display: grid; grid-template-columns: 210px 1fr;
+          gap: 26px; align-items: baseline;
+          padding-top: 18px;
+        }
+        .x-stack-lbl {
+          font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+          color: var(--x-mute); font-weight: 600;
+        }
+
 
         /* ---------- FOOTER ---------- */
         .x-foot {
@@ -704,112 +856,54 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
           max-width: 1180px;
           width: 100%;
           margin: 0 auto;
-          padding: 14px 64px;
+          padding: 12px 64px;
           display: grid;
           grid-template-columns: 1fr auto 1fr;
           align-items: center;
-          font-size: 12.5px;
+          font-size: 12px;
           color: var(--x-mute);
           letter-spacing: 0;
         }
         .x-foot-inner .r { text-align: right; }
-        .x-foot-inner b { color: var(--x-ink); font-weight: 500; }
+        .x-foot-inner b { color: var(--x-ink); font-weight: 600; }
         .x-foot .dots {
-          display: inline-flex; gap: 6px;
-          margin-left: 12px; vertical-align: middle;
+          display: inline-flex; gap: 5px;
+          margin-left: 10px; vertical-align: middle;
         }
         .x-foot .dots i {
-          width: 5px; height: 5px; border-radius: 50%;
+          width: 4px; height: 4px; border-radius: 50%;
           background: var(--x-line);
         }
         .x-foot .dots i.on { background: var(--x-accent); }
 
-        .x-sol {
-          padding: 20px 0;
-          border-top: 1px solid var(--x-line);
-          display: grid;
-          grid-template-columns: 200px 1fr;
-          gap: 26px;
-          align-items: baseline;
-        }
-        .x-sol:last-child { border-bottom: 1px solid var(--x-line); }
-        .x-sol h4 {
-          margin: 0;
-          font-size: 15.5px;
-          font-weight: 600;
-          letter-spacing: -.008em;
-        }
-        .x-sol p {
-          margin: 0;
-          font-size: 15px;
-          line-height: 1.75;
-          color: var(--x-mute);
-        }
-
-        .x-results-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-          gap: 12px;
-        }
-        .x-metric {
-          padding: 18px 22px;
-          background: var(--x-bg-2);
-          display: flex; justify-content: space-between; align-items: baseline;
-        }
-        .x-metric .k {
-          font-size: 11px;
-          letter-spacing: .22em;
-          text-transform: uppercase;
-          color: var(--x-mute);
-          font-weight: 500;
-        }
-        .x-metric .v {
-          font-size: 24px;
-          font-weight: 600;
-          color: var(--x-accent);
-          letter-spacing: -.015em;
-        }
-        /* 텍스트형 지표(라벨이 긴 경우) — 세로 배치 + 작은 값 */
-        .x-metric.text {
-          flex-direction: column;
-          align-items: flex-start;
-          gap: 8px;
-        }
-        .x-metric.text .v {
-          font-size: 15px;
-          font-weight: 600;
-          letter-spacing: -.005em;
-          line-height: 1.35;
-        }
-
-        /* ====== TABLET (<= 1024px) — single column, tighter gutters ====== */
+        /* ====== TABLET (<= 1024px) ====== */
         @media (max-width: 1024px) {
-          .x-header-inner { padding: 16px 32px; gap: 20px; }
+          .x-header-inner { padding: 14px 32px; gap: 20px; }
           .x-main { padding: 0 32px; }
-          .x-foot-inner { padding: 14px 32px; }
+          .x-foot-inner { padding: 12px 32px; }
           .x-nav { gap: 18px; }
+          .x-status { display: none; }
 
-          /* 2단 프레임을 단일 컬럼으로 접고, 사이드 노트(마진 노트)는 숨김 */
           .x-frame {
             grid-template-columns: minmax(0, 1fr) !important;
             gap: 0 !important;
-            padding: 36px 0;
+            padding: 36px 0 56px;
           }
           .x-side { display: none !important; }
 
-          .x-h1 { font-size: 38px; }
-          .x-h2 { font-size: 28px; }
-          .x-lede { font-size: 17px; }
+          .x-h1 { font-size: 36px; }
+          .x-h2 { font-size: 27px; }
+          .x-lede { font-size: 16.5px; }
+          .x-sol, .x-stack-row { grid-template-columns: 170px 1fr; gap: 20px; }
         }
 
-        /* ====== MOBILE (<= 640px) — full-bleed, stacked rows ====== */
+        /* ====== MOBILE (<= 640px) ====== */
         @media (max-width: 640px) {
           .x-header-inner {
             grid-template-columns: 1fr auto;
-            gap: 12px 16px;
-            padding: 14px 20px;
+            gap: 10px 12px;
+            padding: 12px 20px;
           }
-          /* nav를 가로 스크롤 가능한 한 줄로, 전체 폭 차지 */
           .x-nav {
             grid-column: 1 / -1;
             justify-content: flex-start;
@@ -820,55 +914,34 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
           }
           .x-nav::-webkit-scrollbar { display: none; }
           .x-nav button { white-space: nowrap; flex: 0 0 auto; }
-          .x-status { display: none; }
+          .x-brand .sub { display: none; }
 
           .x-main { padding: 0 20px; }
-          .x-frame { padding: 28px 0; }
+          .x-frame { padding: 24px 0 48px; }
 
-          .x-h1 { font-size: 30px; }
-          .x-h2 { font-size: 23px; }
+          .x-h1 { font-size: 29px; }
+          .x-h2 { font-size: 22px; }
           .x-lede { font-size: 16px; max-width: none; }
 
-          /* 라벨 + 값 형태의 2단 행들을 세로로 적층 */
-          .x-dl-row {
-            grid-template-columns: 1fr;
-            gap: 6px;
-            padding: 14px 0;
-          }
-          .x-sol {
-            grid-template-columns: 1fr;
-            gap: 8px;
-            padding: 16px 0;
-          }
-          .x-case, .x-acc-head, .x-ai-card {
-            grid-template-columns: 40px 1fr auto;
-            gap: 14px;
-            padding: 22px 0;
-          }
-          .x-case:hover, .x-ai-card:hover {
-            padding-left: 0; padding-right: 0;
-          }
-          .x-case-title, .x-ai-title { font-size: 20px; }
+          .x-dl-row { grid-template-columns: 1fr; gap: 6px; padding: 14px 0; }
+          .x-sol, .x-stack-row { grid-template-columns: 1fr; gap: 6px; padding: 16px 0; }
+          .x-stack-row { padding-top: 16px; }
 
-          .x-timeline li { grid-template-columns: 60px 1fr; gap: 14px; }
-          .x-arc { grid-template-columns: 24px 1fr; gap: 6px 14px; }
-          .x-arc-note { grid-column: 2; }
+          .x-acc-head { grid-template-columns: 32px 1fr auto; gap: 12px; padding: 18px 8px; }
+          .x-acc-grid { padding: 4px 8px 28px; }
+          .x-case-title { font-size: 18px; }
 
-          /* Results 지표 그리드가 좁은 화면에서 넘치지 않도록 */
-          .x-ai-metrics { gap: 18px; }
-          .x-results-grid { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
-          /* 좁은 폭에서 라벨/값이 한 줄에 짓눌리지 않도록 세로 적층 */
-          .x-metric {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 6px;
-            padding: 14px 16px;
-          }
+          .x-feat-head { padding: 18px; }
+          .x-feat-body { padding: 18px; }
+          .x-feat-title { font-size: 21px; }
+
+          .x-timeline li { grid-template-columns: 62px 1fr; gap: 12px; }
+          .x-results-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
 
           .x-foot-inner {
             grid-template-columns: 1fr;
-            gap: 6px;
-            padding: 12px 20px;
+            gap: 4px;
+            padding: 10px 20px;
             text-align: center;
           }
           .x-foot-inner .r { text-align: center; }
@@ -879,101 +952,91 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
       <header className="x-header">
         <div className="x-header-inner">
           <div className="x-brand">
-            최&nbsp;환<span className="sub">Software Engineer</span>
+            <span>최&nbsp;환</span>
+            <span className="sub">{v.role}</span>
           </div>
           <nav className="x-nav">
             {C2_SECTIONS.map((s) =>
             <button
               key={s.id}
               className={section === s.id ? "active" : ""}
+              aria-current={section === s.id ? "page" : undefined}
               onClick={() => goSectionById(s.id)}>
                 {s.label}
               </button>
             )}
           </nav>
-          <div className="x-status">
-            <span className="dot" />
-            새로운 기회 탐색 중
+          <div className="x-head-right">
+            <span className="x-status">
+              <span className="dot" />
+              새로운 기회 탐색 중
+            </span>
+            {vswitch(true)}
           </div>
         </div>
       </header>
 
       {/* MAIN */}
       <main className="x-main" ref={scrollRef}>
-        <div key={animKey} className={"x-frame" + (slideDir > 0 ? " x-slide-right" : slideDir < 0 ? " x-slide-left" : "")}>
+        <div key={animKey + "-" + variant} className={"x-frame" + (slideDir > 0 ? " x-slide-right" : slideDir < 0 ? " x-slide-left" : "")}>
           {section === "landing" &&
           <>
               <div>
                 <div className="x-eyebrow"><span className="bar" /><b>00</b> · Landing</div>
                 <h1 className="x-h1">
                   {data.nameEn}<br />
-                  <span className="em">{data.role}</span>
+                  <span className="em">{v.role}</span>
                 </h1>
-                <p className="x-lede">{data.tagline}</p>
+                <p className="x-lede">{v.tagline}</p>
 
-                <div style={{ display: "flex", gap: 12, marginBottom: 40 }}>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 44 }}>
+                  <button className="x-btn x-btn-primary" onClick={() => goSectionById("work")}>
+                    View Work
+                  </button>
                   <button className="x-btn" onClick={() => goSectionById("about")}>
                     About
-                  </button>
-                  <button className="x-btn x-btn-primary" onClick={() => goSectionById("work")}>
-                    View Work →
                   </button>
                 </div>
 
                 <div className="x-section-h">Featured Work</div>
-                {(() => {
-                  const bada = data.caseStudies.find((c) => c.id === "bada");
-                  return (
-                    <div
-                      onClick={() => goSectionById("work")}
-                      style={{
-                        minWidth: 0,
-                        borderLeft: "3px solid var(--x-accent)",
-                        padding: "24px 28px",
-                        cursor: "pointer",
-                        transition: "background .15s",
-                        overflowWrap: "anywhere",
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = "var(--x-bg-2)"}
-                      onMouseLeave={(e) => e.currentTarget.style.background = ""}
-                    >
-                      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: 12, marginBottom: 10 }}>
-                        <span style={{ fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--x-accent)", fontWeight: 500 }}>★ Featured</span>
-                        <span style={{ fontSize: 12, color: "var(--x-mute)", letterSpacing: ".04em" }}>{bada.tag}</span>
-                        <span style={{ fontSize: 12, color: "var(--x-mute)" }}>{bada.period}</span>
-                      </div>
-                      <div style={{ fontSize: 22, fontWeight: 500, letterSpacing: "-.02em", marginBottom: 8 }}>{bada.title}</div>
-                      <div style={{ fontSize: 15, color: "var(--x-mute)", lineHeight: 1.65, marginBottom: 18 }}>{bada.subtitle}</div>
-                      <div style={{ fontSize: 14, color: "var(--x-mute)" }}>{bada.lessons}</div>
-                      <div style={{ marginTop: 18, fontSize: 13, color: "var(--x-accent)", letterSpacing: ".04em" }}>자세히 보기 →</div>
+                <div className="x-feat">
+                  <div className="x-feat-head">
+                    <div className="x-feat-badges">
+                      <span className="x-badge">Featured</span>
+                      <span className="x-badge ghost">{featured.tag}</span>
+                      <span style={{ fontSize: 12, color: "var(--x-mute)" }}>{featured.period}</span>
                     </div>
-                  );
-                })()}
+                    <div className="x-feat-title">{featured.title}</div>
+                    <p className="x-feat-sub">{featured.subtitle}</p>
+                  </div>
+                  <div className="x-feat-body">
+                    <p style={{ margin: "0 0 20px", fontSize: 14.5, lineHeight: 1.8, color: "var(--x-ink-2)" }}>
+                      {featured.lessons || featured.challenge}
+                    </p>
+                    {(featured.results || featured.metrics) &&
+                    <div className="x-results-grid" style={{ marginBottom: 20 }}>
+                      {(featured.results || featured.metrics).map((m, i) =>
+                        <div key={i} className={"x-metric" + (featured.results ? "" : " text")}>
+                          <div className="k">{m.k}</div>
+                          <div className="v">{m.v}</div>
+                        </div>
+                      )}
+                    </div>
+                    }
+                    <button className="x-btn" onClick={() => goSectionById("work")}>
+                      자세히 보기 →
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <aside className="x-side">
-                <div>
-                  <div className="lbl">Bada Stack</div>
-                  <div className="val" style={{ fontSize: 13.5, lineHeight: 1.8, color: "var(--x-mute)", fontWeight: 400 }}>
-                    Claude Code · Ollama<br />Playwright · TypeScript
+                {(v.sideNotes?.landing || []).map((n, i) =>
+                  <div key={i}>
+                    <div className="lbl">{n.lbl}</div>
+                    <div className="val">{n.val}</div>
                   </div>
-                </div>
-                <div>
-                  <div className="lbl">Workflow</div>
-                  <div className="val" style={{ fontSize: 13.5, lineHeight: 1.8, color: "var(--x-mute)", fontWeight: 400 }}>
-                    Observer → Planner<br />→ Implementer → Reviewer
-                  </div>
-                </div>
-                <div>
-                  <div className="lbl">In Production</div>
-                  <div className="val" style={{ fontSize: 13.5, lineHeight: 1.8, color: "var(--x-mute)", fontWeight: 400 }}>
-                    같은 구조를 사내 업무로<br />이슈 → Draft MR
-                  </div>
-                </div>
-                <div>
-                  <div className="lbl">Status</div>
-                  <div className="val" style={{ color: "var(--x-accent)" }}>● 새로운 기회 탐색 중</div>
-                </div>
+                )}
               </aside>
             </>
           }
@@ -982,16 +1045,16 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
           <>
               <div>
                 <div className="x-eyebrow"><span className="bar" /><b>01</b> · About</div>
-                <h2 className="x-h2">사람의 인지에서 출발해<br />시스템을 짓는 일.</h2>
+                <h2 className="x-h2">{v.id === "agent" ? <>사람의 인지에서 출발해<br />에이전트 시스템으로.</> : <>사람의 인지에서 출발해<br />사람이 놓이는 화면으로.</>}</h2>
 
-                <div className="x-section-h">Story</div>
-                <div style={{ fontSize: 16.5, lineHeight: 1.88, color: "var(--x-ink-2)", marginBottom: 44 }}>
-                  {data.intro.map((p, i) => <p key={i} style={{ margin: "0 0 1.15em" }}>{p}</p>)}
+                <div className="x-section-h">Profile</div>
+                <div style={{ fontSize: 15.5, lineHeight: 1.9, color: "var(--x-ink-2)", marginBottom: 44, maxWidth: "40em" }}>
+                  {v.intro.map((p, i) => <p key={i} style={{ margin: "0 0 1.1em" }}>{p}</p>)}
                 </div>
 
                 <div className="x-section-h">Skills</div>
                 <dl className="x-dl" style={{ marginBottom: 44 }}>
-                  {Object.entries(data.skills).map(([cat, items]) =>
+                  {skillEntries.map(([cat, items]) =>
                 <div key={cat} className="x-dl-row">
                       <dt>{cat}</dt>
                       <dd>{items.map((s) => <span key={s} className="x-pill">{s}</span>)}</dd>
@@ -1000,7 +1063,7 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
                 </dl>
 
                 <div className="x-section-h">Experience</div>
-                <div className="x-exp">
+                <div className="x-exp" style={{ marginBottom: 44 }}>
                   <div className="x-exp-head">
                     <div><b>{data.experience.company}</b><span className="role">{data.experience.role}</span></div>
                     <span className="x-exp-period">{data.experience.period}</span>
@@ -1015,12 +1078,12 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
                   </ul>
                 </div>
 
-                <div className="x-section-h" style={{ marginTop: 44 }}>Education</div>
+                <div className="x-section-h">Education</div>
                 <dl className="x-dl">
                   {data.education.map((e, i) =>
                 <div key={i} className="x-dl-row">
                       <dt>{e.period}</dt>
-                      <dd><b>{e.school}</b><div style={{ color: "var(--x-mute)", marginTop: 4 }}>{e.detail}</div></dd>
+                      <dd><b>{e.school}</b><div style={{ color: "var(--x-mute)", marginTop: 3, fontSize: 14 }}>{e.detail}</div></dd>
                     </div>
                 )}
                 </dl>
@@ -1028,176 +1091,194 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
 
               <aside className="x-side">
                 <div>
+                  <div className="lbl">Focus</div>
+                  <div className="val">{v.focus}</div>
+                </div>
+                <div>
                   <div className="lbl">Bridge</div>
-                  <div className="val">심리학 → 엔지니어링</div>
-                  <div style={{ color: "var(--x-mute)", marginTop: 8, fontSize: 13.5 }}>
-                    사람을 읽던 시선이, 지금은 AI 인터페이스를 설계하는 일로 이어졌다고 생각합니다.
+                  <div className="val"><b>심리학 → 엔지니어링</b></div>
+                  <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.65 }}>
+                    사람을 읽던 시선이, 지금은 시스템을 설계하는 일로 이어졌다고 생각합니다.
                   </div>
                 </div>
               </aside>
             </>
           }
 
-          {section === "work" && (() => {
-            const bada = data.caseStudies.find((c) => c.id === "bada");
-            const others = cases.filter((c) => c.id !== "bada");
-            return (
+          {section === "work" &&
               <>
                 <div>
                   <div className="x-eyebrow"><span className="bar" /><b>02</b> · Work</div>
-                  <h2 className="x-h2">프로젝트 나열이 아닌,<br />문제와 설계의 흐름.</h2>
+                  <h2 className="x-h2" style={{ marginBottom: 40 }}>프로젝트 나열이 아닌,<br />문제와 설계의 흐름.</h2>
 
-                  {/* ── Bada Featured ── */}
-                  <div style={{
-                    borderLeft: "3px solid var(--x-accent)",
-                    paddingLeft: 28,
-                    marginBottom: 56,
-                  }}>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 16 }}>
-                      <span style={{ fontSize: 10.5, letterSpacing: ".14em", textTransform: "uppercase", color: "var(--x-accent)", fontWeight: 500 }}>★ Featured</span>
-                      <span style={{ fontSize: 12, color: "var(--x-mute)" }}>{bada.tag} · {bada.period}</span>
+                  {/* ── Featured Case ── */}
+                  <div className="x-section-h">Featured Case</div>
+                  <div className="x-feat" style={{ marginBottom: 52 }}>
+                    <div className="x-feat-head">
+                      <div className="x-feat-badges">
+                        <span className="x-badge">{featured.number}</span>
+                        <span className="x-badge ghost">{featured.tag}</span>
+                        <span style={{ fontSize: 12, color: "var(--x-mute)" }}>{featured.period}</span>
+                        {featured.link &&
+                          <a href={`https://${featured.link}`} target="_blank" rel="noopener noreferrer"
+                             style={{ fontSize: 12, color: "var(--x-accent)", textDecoration: "underline", textUnderlineOffset: 2 }}>
+                            {featured.link} ↗
+                          </a>
+                        }
+                      </div>
+                      <div className="x-feat-title">{featured.title}</div>
+                      <p className="x-feat-sub">{featured.subtitle}</p>
                     </div>
-                    <div style={{ fontSize: 28, fontWeight: 500, letterSpacing: "-.022em", marginBottom: 10 }}>{bada.title}</div>
-                    <p style={{ fontSize: 16, color: "var(--x-mute)", lineHeight: 1.7, margin: "0 0 32px", textWrap: "balance" }}>{bada.subtitle}</p>
 
-                    <div className="x-section-h">Problem</div>
-                    <p style={{ fontSize: 15.5, lineHeight: 1.82, margin: "0 0 32px", color: "var(--x-ink-2)" }}>{bada.problem}</p>
+                    <div className="x-feat-body">
+                      {/* Bada는 분량이 많아 탭으로, 나머지는 한 번에 */}
+                      {featured.id === "bada" ? (
+                        <>
+                          <div className="x-tabs" role="tablist">
+                            {BADA_TABS.map((t) =>
+                              <button key={t.id} role="tab" aria-selected={badaTab === t.id}
+                                className={badaTab === t.id ? "on" : ""}
+                                onClick={() => setBadaTab(t.id)}>
+                                {t.label}
+                              </button>
+                            )}
+                          </div>
 
-                    <div className="x-section-h">Architecture</div>
-                    <div className="x-pipe">
-                      {bada.pipeline.map((p, i) =>
-                        <React.Fragment key={p.stage}>
-                          <div className="x-pipe-stage">
-                            <div className="x-pipe-name">{p.stage}</div>
-                            <div className="x-pipe-tool">{p.tool}</div>
-                            <div className="x-pipe-rows">
-                              <span>{p.role}</span>
-                              <span>{p.out}</span>
+                          {badaTab === "overview" &&
+                          <div>
+                            <div className="x-section-h">Problem</div>
+                            <p style={{ fontSize: 15, lineHeight: 1.85, margin: "0 0 32px", color: "var(--x-ink-2)", maxWidth: "40em" }}>{featured.problem}</p>
+
+                            <div className="x-section-h">Results</div>
+                            <div className="x-results-grid" style={{ marginBottom: 32 }}>
+                              {featured.results.map((m, i) =>
+                                <div key={i} className="x-metric">
+                                  <div className="k">{m.k}</div>
+                                  <div className="v">{m.v}</div>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="x-section-h">Outcome</div>
+                            <p className="x-note" style={{ marginBottom: 0 }}>{featured.lessons}</p>
+                          </div>
+                          }
+
+                          {badaTab === "architecture" &&
+                          <div>
+                            <div className="x-section-h">Pipeline</div>
+                            <div className="x-pipe">
+                              {featured.pipeline.map((p, i) =>
+                                <div className="x-pipe-stage" key={p.stage}>
+                                  <div className="x-pipe-idx">{String(i + 1).padStart(2, "0")}</div>
+                                  <div className="x-pipe-name">{p.stage}</div>
+                                  <div className="x-pipe-tool">{p.tool}</div>
+                                  <div className="x-pipe-rows">
+                                    <span>{p.role}</span>
+                                    <span>{p.out}</span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            {featured.pipelineNote && <p className="x-note">{featured.pipelineNote}</p>}
+
+                            <div className="x-section-h">Design Decisions</div>
+                            <div style={{ marginBottom: 32 }}>
+                              {featured.solution.map((s, i) =>
+                                <div key={i} className="x-sol">
+                                  <h4>{s.h}</h4>
+                                  <p>{s.d}</p>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="x-section-h">Evolution</div>
+                            <div>
+                              {featured.evolution.map((p, i) =>
+                                <div key={i} className="x-sol">
+                                  <h4><span className="ph">{p.phase}</span>{p.title}</h4>
+                                  <p>{p.body}</p>
+                                </div>
+                              )}
                             </div>
                           </div>
-                          {i < bada.pipeline.length - 1 && <div className="x-pipe-arrow">→</div>}
-                        </React.Fragment>
-                      )}
-                    </div>
-                    {bada.pipelineNote &&
-                    <p className="x-pipe-note">{bada.pipelineNote}</p>
-                    }
+                          }
 
-                    <div className="x-section-h">Solution</div>
-                    <div style={{ marginBottom: 32 }}>
-                      {bada.solution.map((s, i) =>
-                        <div key={i} className="x-sol">
-                          <h4>{s.h}</h4>
-                          <p>{s.d}</p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="x-section-h">Architecture Evolution</div>
-                    <div style={{ marginBottom: 32 }}>
-                      {bada.evolution.map((p, i) =>
-                        <div key={i} className="x-sol">
-                          <h4><span style={{ color: "var(--x-accent)", fontSize: 12, letterSpacing: ".08em", display: "block", marginBottom: 4 }}>{p.phase}</span>{p.title}</h4>
-                          <p>{p.body}</p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="x-section-h">Failure Cases</div>
-                    <div style={{ marginBottom: 32 }}>
-                      {bada.failureCases.map((f, i) =>
-                        <div key={i} className="x-sol">
-                          <h4><span style={{ color: "var(--x-accent)", fontSize: 12, letterSpacing: ".08em", display: "block", marginBottom: 4 }}>{f.type}</span>{f.title}</h4>
-                          <p>{f.body}</p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="x-section-h">Lessons Learned</div>
-                    <ul style={{ listStyle: "none", margin: "0 0 32px", padding: 0 }}>
-                      {bada.lessonsLearned.map((l, i) =>
-                        <li key={i} className="x-focus-item" style={{ marginBottom: 18 }}>
-                          <span className="n">{l.n}</span>
+                          {badaTab === "failures" &&
                           <div>
-                            <div className="h">{l.h}</div>
-                            <div className="d">{l.d}</div>
+                            <p className="x-note">
+                              루프를 운용하며 마주한 실패를 유형별로 정리했습니다. 무엇이 잘못됐는지보다, 그 실패가 어떤 설계 변경으로 이어졌는지를 남겼습니다.
+                            </p>
+                            {featured.failureCases.map((f, i) =>
+                              <div key={i} className="x-sol">
+                                <h4><span className="ph">{f.type}</span>{f.title}</h4>
+                                <p>{f.body}</p>
+                              </div>
+                            )}
                           </div>
-                        </li>
-                      )}
-                    </ul>
+                          }
 
-                    <div className="x-section-h">Results</div>
-                    <div className="x-results-grid">
-                      {bada.results.map((m, i) =>
-                        <div key={i} className="x-metric">
-                          <div className="k">{m.k}</div>
-                          <div className="v">{m.v}</div>
-                        </div>
+                          {badaTab === "lessons" &&
+                          <div>
+                            <ul className="x-focus">
+                              {featured.lessonsLearned.map((l, i) =>
+                                <li key={i} className="x-focus-item">
+                                  <span className="n">{l.n}</span>
+                                  <div>
+                                    <div className="h">{l.h}</div>
+                                    <div className="d">{l.d}</div>
+                                  </div>
+                                </li>
+                              )}
+                            </ul>
+                          </div>
+                          }
+                        </>
+                      ) : (
+                        <>
+                          <div className="x-section-h">Challenge</div>
+                          <p style={{ fontSize: 15, lineHeight: 1.85, margin: "0 0 32px", color: "var(--x-ink-2)", maxWidth: "40em" }}>
+                            {featured.challenge || featured.problem}
+                          </p>
+                          <CaseDetail c={featured} />
+                        </>
                       )}
                     </div>
                   </div>
 
                   {/* ── Other Projects ── */}
-                  <div className="x-section-h">Other Projects</div>
+                  <div className="x-section-h">Selected Projects</div>
                   <div className="x-acc-list">
                     {others.map((c) => {
                       const open = expandedCase === c.id;
                       return (
                         <div key={c.id} className={"x-acc" + (open ? " open" : "")}>
-                          <div
+                          <button
+                            type="button"
                             className="x-acc-head"
+                            aria-expanded={open}
                             onClick={() => setExpandedCase(open ? null : c.id)}>
                             <div className="x-case-no">{c.number}</div>
                             <div>
                               <div className="x-case-title">{c.title}</div>
                               <div className="x-case-sub">{c.subtitle}</div>
-                              <div className="x-case-meta">{c.period} · <b>{c.tag}</b></div>
-                              {!open &&
-                              <div className="x-acc-peek">
-                                <span className="x-acc-peek-label">Challenge</span>
-                                {c.challenge}
+                              <div className="x-case-meta">
+                                <span>{c.period}</span>
+                                <span className="x-badge ghost">{c.tag}</span>
                               </div>
-                              }
                             </div>
-                            <svg className="x-acc-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <svg className="x-acc-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                               <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
-                          </div>
+                          </button>
                           {open &&
                           <div className="x-acc-body">
                             <div className="x-acc-grid">
                               <div className="x-section-h">Challenge</div>
-                              <p style={{ margin: "0 0 28px", fontSize: 15, lineHeight: 1.8, color: "var(--x-ink-2)" }}>
-                                {c.challenge}
+                              <p style={{ margin: "0 0 28px", fontSize: 14.5, lineHeight: 1.85, color: "var(--x-ink-2)", maxWidth: "40em" }}>
+                                {c.challenge || c.problem}
                               </p>
-
-                              <div className="x-section-h">Solution</div>
-                              <div style={{ marginBottom: 28 }}>
-                                {c.solution.map((s, i) =>
-                                  <div key={i} className="x-sol">
-                                    <h4>{s.h}</h4>
-                                    <p>{s.d}</p>
-                                  </div>
-                                )}
-                              </div>
-
-                              {c.metrics &&
-                              <>
-                                <div className="x-section-h">Results</div>
-                                <div style={{ display: "grid", gridTemplateColumns: `repeat(${c.metrics.length}, 1fr)`, gap: 12, marginBottom: 28 }}>
-                                  {c.metrics.map((m, i) =>
-                                    <div key={i} className="x-metric text">
-                                      <div className="k">{m.k}</div>
-                                      <div className="v">{m.v}</div>
-                                    </div>
-                                  )}
-                                </div>
-                              </>
-                              }
-
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                {c.stack.map((s) => <span key={s} className="x-pill">{s}</span>)}
-                              </div>
+                              <CaseDetail c={c} />
                             </div>
                           </div>
                           }
@@ -1208,28 +1289,16 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
                 </div>
 
                 <aside className="x-side">
-                  <div>
-                    <div className="lbl">Pipeline</div>
-                    <div className="val" style={{ fontSize: 13, lineHeight: 1.8, color: "var(--x-mute)", fontWeight: 400 }}>
-                      Observer<br />→ Planner<br />→ Implementer<br />→ Reviewer
+                  {(v.sideNotes?.work || []).map((n, i) =>
+                    <div key={i}>
+                      <div className="lbl">{n.lbl}</div>
+                      <div className="val">{n.val}</div>
                     </div>
-                  </div>
-                  <div>
-                    <div className="lbl">Memory</div>
-                    <div className="val" style={{ fontSize: 13, lineHeight: 1.7, color: "var(--x-mute)", fontWeight: 400 }}>
-                      REVIEW_CHECKLIST.md<br />장기 실패 패턴 축적
-                    </div>
-                  </div>
-                  <div>
-                    <div className="lbl">Key Insight</div>
-                    <div className="val" style={{ fontSize: 13, lineHeight: 1.7, color: "var(--x-mute)", fontWeight: 400 }}>
-                      Workflow가 LLM보다<br />결과의 질을 결정했다
-                    </div>
-                  </div>
+                  )}
                 </aside>
               </>
-            );
-          })()}
+          }
+
 
           {section === "contact" &&
           <>
@@ -1241,7 +1310,7 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
                   )}
                 </h2>
                 <dl className="x-dl">
-                  <div className="x-dl-row"><dt>Email</dt><dd><b>{data.contact.email}</b></dd></div>
+                  <div className="x-dl-row"><dt>Email</dt><dd><b><a href={`mailto:${data.contact.email}`}>{data.contact.email}</a></b></dd></div>
                   <div className="x-dl-row"><dt>GitHub</dt><dd><b><a href={`https://${data.contact.github}`} target="_blank" rel="noopener noreferrer">{data.contact.github}</a></b></dd></div>
                   <div className="x-dl-row"><dt>Location</dt><dd>{data.contact.location}</dd></div>
                 </dl>
@@ -1250,13 +1319,11 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
               <aside className="x-side">
                 <div>
                   <div className="lbl">Response time</div>
-                  <div className="val">~24h</div>
+                  <div className="val"><b>~24h</b></div>
                 </div>
                 <div>
                   <div className="lbl">Scope</div>
-                  <div className="val" style={{ fontSize: 14, lineHeight: 1.7 }}>
-                    UI 엔진 · 접근성<br />시스템 설계 · AI
-                  </div>
+                  <div className="val">{v.focus}</div>
                 </div>
               </aside>
             </>
@@ -1267,7 +1334,7 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
       {/* FOOTER */}
       <footer className="x-foot">
         <div className="x-foot-inner">
-          <div />
+          <div>{v.navLabel}</div>
           <div>
             <b>{current.label}</b>
             <span className="dots">
@@ -1276,7 +1343,7 @@ export default function DirectionC2({ data, accent = "#9b3a2a" }) {
               )}
             </span>
           </div>
-          <div className="r">Portfolio v2026.05</div>
+          <div className="r">Portfolio v2026.08</div>
         </div>
       </footer>
 

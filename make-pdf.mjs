@@ -1,6 +1,8 @@
 // 포트폴리오 PDF 생성기
-// data.jsx를 읽어 A4 인쇄용 정적 HTML을 만들고 Playwright로 PDF를 출력합니다.
-//   node make-pdf.mjs            → dist/portfolio.pdf
+// data.jsx + variants.jsx를 읽어 A4 인쇄용 정적 HTML을 만들고 Playwright로 PDF를 출력합니다.
+//   node make-pdf.mjs                → dist/portfolio-agent.pdf (기본)
+//   node make-pdf.mjs frontend       → dist/portfolio-frontend.pdf
+//   node make-pdf.mjs all            → 두 버전 모두
 // 사이트(direction-c2.jsx)와 동일한 색감/타이포를 사용하되, 인쇄용 단일 흐름 레이아웃으로 재구성합니다.
 import { chromium } from 'playwright';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -22,17 +24,36 @@ async function loadData() {
   return fn();
 }
 
+// --- variants.jsx 로드 (VARIANTS 객체만 평가) ---
+async function loadVariants() {
+  const src = readFileSync(resolve(__dir, 'src/2026/variants.jsx'), 'utf8');
+  const m = src.match(/export const VARIANTS\s*=\s*(\{[\s\S]*?\n\};)/);
+  if (!m) throw new Error('variants.jsx에서 VARIANTS를 찾지 못했습니다.');
+  // eslint-disable-next-line no-new-func
+  return new Function('return ' + m[1].replace(/;$/, '') + '\n')();
+}
+
 const esc = (s = '') => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
-function buildHTML(data) {
-  const accent = '#9b3a2a';
+function buildHTML(data, v) {
+  // 사이트와 동일한 뉴트럴 팔레트
+  const accent = '#1257c7';
   const vars = `
-    --x-bg:#ffffff; --x-bg-2:#ffffff; --x-ink:#171717; --x-ink-2:#33312c;
-    --x-mute:#7c7a74; --x-soft:#c2bfb8; --x-line:#e4e1da; --x-line-2:#eeece7;
+    --x-bg:#ffffff; --x-bg-2:#f6f7f8; --x-ink:#14171a; --x-ink-2:#3d4348;
+    --x-mute:#6b7280; --x-soft:#9ca3af; --x-line:#e3e6e9; --x-line-2:#eef0f2;
     --x-accent:${accent};
     --x-sans:'Noto Sans KR','Noto Sans',system-ui,sans-serif;`;
 
-  const cases = [...data.caseStudies].sort((a, b) => a.number.localeCompare(b.number));
+  // variant의 caseOrder대로 정렬 (사이트와 동일한 규칙)
+  const order = v.caseOrder || [];
+  const rank = (c) => {
+    const i = order.indexOf(c.id);
+    return i === -1 ? order.length + Number(c.number) : i;
+  };
+  // 표시 번호는 variant 순서에 맞춰 다시 매깁니다 (data의 number는 고정값이라 순서와 어긋남).
+  const cases = [...data.caseStudies]
+    .sort((a, b) => rank(a) - rank(b))
+    .map((c, i) => ({ ...c, number: String(i + 1).padStart(2, '0') }));
 
   const sectionH = (t) => `<div class="x-section-h">${esc(t)}</div>`;
 
@@ -50,7 +71,7 @@ function buildHTML(data) {
     <div class="cover-top">
       <div class="x-eyebrow"><span class="bar"></span><b>PORTFOLIO</b> &nbsp;·&nbsp; 2026</div>
       <h1 class="x-h1 cover-name">${esc(data.nameEn)}</h1>
-      <div class="cover-role">${esc(data.role)}</div>
+      <div class="cover-role">${esc(v.role)}</div>
       <div class="cover-contact">
         <span>${esc(data.contact.email)}</span><span class="sep">·</span>
         <a href="https://${esc(data.contact.github)}">${esc(data.contact.github)}</a>
@@ -69,7 +90,11 @@ function buildHTML(data) {
   </section>`;
 
   // ---- ABOUT ----
-  const skills = Object.entries(data.skills).map(([k, vs]) => `
+  const skillOrder = v.skillOrder || [];
+  const skills = Object.entries(data.skills).sort((a, b) => {
+    const ia = skillOrder.indexOf(a[0]), ib = skillOrder.indexOf(b[0]);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  }).map(([k, vs]) => `
     <div class="skill-row">
       <div class="skill-k">${esc(k)}</div>
       <div class="skill-tags">${vs.map((v) => `<span class="tag">${esc(v)}</span>`).join('')}</div>
@@ -88,11 +113,11 @@ function buildHTML(data) {
     </div>`).join('');
 
   const about = `
-  <section class="block break-before">
+  <section class="block about-block">
     <div class="lead">
       <div class="x-eyebrow"><span class="bar"></span><b>01</b> &nbsp; ABOUT</div>
       <h2 class="x-h2">Introduction</h2>
-      ${data.intro.map((p) => `<p class="body">${esc(p)}</p>`).join('')}
+      ${v.intro.map((p) => `<p class="body">${esc(p)}</p>`).join('')}
     </div>
 
     <div class="sub">
@@ -100,7 +125,7 @@ function buildHTML(data) {
       <div class="skills">${skills}</div>
     </div>
 
-    <div class="sub">
+    <div class="sub exp-start">
       ${sectionH('Experience')}
       <div class="exp-head"><b>${esc(data.experience.company)}</b> · ${esc(data.experience.role)} <span class="muted">${esc(data.experience.period)}</span></div>
       <div class="timeline">${timeline}</div>
@@ -112,14 +137,12 @@ function buildHTML(data) {
     </div>
   </section>`;
 
-  // ---- WORK INTRO — 별도 표지 없이 첫 프로젝트(Bada) 위에 도입부로 얹는다.
-  // 목차는 커버 하단에 있으므로 여기선 주제 제시 + 흐름 연결만 한다.
-  const workLeadParas = data.pdf?.workLead ?? [];
+  // ---- WORK INTRO — 별도 표지 없이 첫 케이스 위에 섹션 머리로 얹는다.
+  // 목차는 커버 하단에 있고 각 케이스가 스스로 설명하므로 리드 문단은 두지 않는다.
   const workLead = `
     <div class="lead work-lead">
       <div class="x-eyebrow"><span class="bar"></span><b>02</b> &nbsp; WORK</div>
       <h2 class="x-h2">Selected Work</h2>
-      ${workLeadParas.map((p, i) => `<p class="x-lede"${i === workLeadParas.length - 1 ? ' style="margin-bottom:0"' : ''}>${esc(p)}</p>`).join('')}
     </div>`;
 
   // ---- WORK (case studies) ----
@@ -188,7 +211,9 @@ function buildHTML(data) {
         <div class="metric"><div class="metric-v">${esc(m.v)}</div><div class="metric-k muted">${esc(m.k)}</div></div>`).join('')}</div>`, 'sub--gap'));
     }
 
-    return `<section class="block case break-before">${blocks.join('\n')}</section>`;
+    // 섹션이 5개를 넘는 긴 케이스는 간격을 좁혀 페이지 끝에 몇 줄만 넘치는 것을 막는다.
+    const long = blocks.length > 6 ? ' case--long' : '';
+    return `<section class="block case${long}">${blocks.join('\n')}</section>`;
   };
 
   // 각 프로젝트는 새 페이지에서 시작 — 프로젝트 간 구분과 여백을 일관되게 확보.
@@ -205,8 +230,10 @@ function buildHTML(data) {
     { label: 'GITHUB', value: `<a href="${esc(githubUrl)}">${esc(data.contact.github)}</a>` },
     ...(phone ? [{ label: 'PHONE', value: esc(phone) }] : []),
   ];
+  // Contact는 3줄뿐이라 새 페이지를 강제하면 페이지 대부분이 빈다.
+  // 앞 케이스 뒤에 이어 붙이되, 잘리지만 않게 한다(자리가 없으면 자연히 다음 장으로).
   const contact = `
-  <section class="block break-before">
+  <section class="block contact-block">
     <div class="x-eyebrow"><span class="bar"></span><b>03</b> &nbsp; CONTACT</div>
     <h2 class="x-h2">Contact</h2>
     <div class="contact-list">
@@ -227,17 +254,44 @@ function buildHTML(data) {
     font-size:13px; line-height:1.7; letter-spacing:-.003em; -webkit-font-smoothing:antialiased; }
 
   /* 흐름 단위. 강제 페이지 분할 없음 — 콘텐츠가 자연스럽게 이어진다. */
+  /* 페이지를 강제로 나누지 않으므로, 섹션 구분은 여백이 대신한다.
+     대분류(About → Work → Contact)와 케이스 사이는 충분히 벌린다. */
   .block{ margin-bottom:30px; }
   .block:last-child{ margin-bottom:0; }
+  /* About·Work·Contact 세 대분류는 같은 형태(굵은 선 + 여백)로 시작한다. */
+  .about-block{ margin-bottom:72px; padding-top:36px; border-top:2px solid var(--x-ink); }
+  .case + .case{ margin-top:56px; }
+  /* 케이스가 페이지 맨 위에서 시작할 땐 위 여백이 낭비이므로 줄인다. */
+  .case{ break-inside:auto; }
   /* 케이스·후반 섹션은 새 페이지에서 시작 (독립 단위) */
   .break-before{ break-before:page; page-break-before:always; }
+  /* Contact는 통째로 유지하되 페이지를 강제하지 않는다 + 앞 케이스와 시각적으로 분리 */
+  /* Contact도 About·Work와 같은 대분류이므로 구분 여백·굵기를 맞춘다. */
+  .contact-block{ break-inside:avoid; margin-top:72px; padding-top:36px; border-top:2px solid var(--x-ink); }
   /* 섹션 제목+첫 내용 묶음: 페이지 끝에서 고아로 잘리지 않게 */
   .sub{ margin-top:20px; break-inside:avoid; }
+  /* About은 4개 블록이 한 페이지에 20px쯤 모자라, 마지막 Education만 다음 장으로
+     밀리며 3페이지가 거의 비었다. 줄여서 욱여넣는 대신 Experience 앞에서 페이지를
+     넘겨, 2페이지(Introduction+Skills)와 3페이지(Experience+Education)가
+     각각 내용으로 차게 한다. */
+  .about-block > .sub.exp-start{ break-before:page; margin-top:0; }
+  /* 단, 섹션의 '마지막' 블록까지 통째로 avoid하면 그 블록만 다음 장으로 튕겨
+     앞 페이지가 거의 비어 버린다(Education·Results 고아 페이지).
+     마지막 블록은 쪼개짐을 허용하고, 내부 항목만 온전히 지킨다. */
+  .block > .sub:last-child{ break-inside:auto; }
+  .block > .sub:last-child > *{ break-inside:avoid; }
+  .edu-row, .c-row{ break-inside:avoid; }
   /* 목록형 섹션은 페이지를 넘겨 이어진다 — 통째로 avoid하면 앞 페이지에 큰 여백이 남는다.
      쪼개짐 방지는 개별 항목(.sol-item 등)에서 처리한다. */
   .sub--flow{ break-inside:auto; }
   /* Lessons Learned · Results — 이전 섹션과 좀 더 떼어 놓는다 */
   .sub--gap{ margin-top:26px; }
+  /* 섹션이 많은 케이스(Bada)는 간격을 조금 좁혀 마지막 페이지에 몇 줄만 넘어가는 것을 막는다. */
+  .case--long .sub{ margin-top:11px; }
+  .case--long .sub--gap{ margin-top:14px; }
+  .case--long .case-head{ margin-bottom:12px; }
+  .case--long .fail{ gap:11px 20px; }
+  .case--long .lessons{ gap:8px 20px; }
   .lead{ break-inside:avoid; }
   h2,.x-h2,.x-section-h{ break-after:avoid; }
 
@@ -251,13 +305,19 @@ function buildHTML(data) {
   .x-eyebrow .bar{ flex:0 0 26px; height:1px; background:var(--x-accent); opacity:.6; }
   .x-h1{ font-weight:600; font-size:42px; line-height:1.14; letter-spacing:-.03em; margin:0 0 18px; }
   .x-h2{ font-weight:600; font-size:27px; line-height:1.22; letter-spacing:-.026em; margin:0 0 18px; }
+  /* 대분류 타이틀(Introduction·Selected Work·Contact)은 본문과 더 떼어 놓는다. */
+  .about-block > .lead .x-h2,
+  .work-lead .x-h2,
+  .contact-block .x-h2{ margin-bottom:30px; }
+  .contact-block .x-h2{ font-size:22px; }
   .x-lede{ font-size:15px; line-height:1.62; color:var(--x-ink-2); margin:0 0 22px; max-width:40em; }
   .x-section-h{ font-size:10.5px; letter-spacing:.22em; text-transform:uppercase; color:var(--x-mute);
     font-weight:600; margin:0 0 12px; }
 
   /* COVER — 타이틀 상단 + 목차 하단, 한 페이지 (콘텐츠 영역 = 297-18-16mm) */
-  .cover{ display:flex; flex-direction:column; min-height:263mm;
-    break-after:page; page-break-after:always; }
+  /* min-height로 이미 한 페이지를 채우므로 break-after까지 두면
+     뒤따르는 .break-before와 겹쳐 페이지가 하나 더 밀린다. */
+  .cover{ display:flex; flex-direction:column; min-height:263mm; }
   .cover-top{ padding-top:96px; }   /* 상단 여백 — 타이틀을 화면 위쪽 1/3 지점에 */
   .cover-name{ font-size:56px; margin-bottom:10px; }
   .cover-role{ font-size:18px; color:var(--x-accent); font-weight:500; margin-bottom:20px; letter-spacing:-.01em; }
@@ -305,7 +365,8 @@ function buildHTML(data) {
   .toc-sub{ font-size:12px; }
 
   /* CONTENTS (커버 하단 목차) */
-  .toc{ display:flex; flex-direction:column; }
+  /* 각 행이 border-top만 가지면 목록이 닫히지 않아 허전하다 — 마지막에 아래선을 둔다. */
+  .toc{ display:flex; flex-direction:column; border-bottom:1px solid var(--x-line); }
   .contents .toc-row{ grid-template-columns:22px 1fr; gap:7px; padding:9px 0;
     align-items:baseline; border-top:1px solid var(--x-line); }
   .contents .toc-t{ font-size:15px; }
@@ -315,7 +376,8 @@ function buildHTML(data) {
   .contents .toc-row.indent .toc-t{ font-weight:500; font-size:13px; }
 
   /* WORK 도입부 — 첫 프로젝트 위에 얹히고, 아래로 충분한 여백을 둔다. */
-  .work-lead{ margin-bottom:44px; }
+  /* Work 섹션 머리 — 앞의 About과 확실히 떨어뜨리고, 첫 케이스와도 간격을 준다. */
+  .work-lead{ margin-top:24px; margin-bottom:44px; padding-top:36px; border-top:2px solid var(--x-ink); }
 
   /* CASE */
   .case-head{ display:grid; grid-template-columns:auto 1fr; gap:18px; align-items:start;
@@ -354,7 +416,8 @@ function buildHTML(data) {
   .fail-type{ font-size:10.5px; letter-spacing:.1em; color:var(--x-accent); font-weight:600; }
   .fail-title{ font-weight:600; font-size:13px; margin:1px 0 4px; }
 
-  .lessons{ display:flex; flex-direction:column; gap:10px; }
+  /* 항목이 한 줄짜리라 2단으로 두면 페이지를 훨씬 촘촘하게 채운다. */
+  .lessons{ display:grid; grid-template-columns:1fr 1fr; gap:10px 20px; align-items:start; }
   .lesson-item{ display:grid; grid-template-columns:auto 1fr; gap:14px; align-items:start; break-inside:avoid; }
   .lesson-n{ font-size:13px; font-weight:700; color:var(--x-soft); }
   .lesson-h{ font-weight:600; font-size:13px; }
@@ -380,35 +443,46 @@ function buildHTML(data) {
 }
 
 const data = await loadData();
-const html = buildHTML(data);
-const htmlPath = resolve(__dir, 'dist/portfolio-print.html');
-writeFileSync(htmlPath, html);
+const VARIANTS = await loadVariants();
+
+const arg = (process.argv[2] || 'agent').toLowerCase();
+const targets = arg === 'all' ? Object.keys(VARIANTS) : [VARIANTS[arg] ? arg : 'agent'];
 
 const browser = await chromium.launch();
-const page = await browser.newPage();
-await page.goto('file://' + htmlPath, { waitUntil: 'networkidle' });
-await page.waitForTimeout(800); // 웹폰트 로드 대기
-const outPath = resolve(__dir, 'dist/portfolio.pdf');
 
-// 모든 페이지 하단에 규칙적인 구분선(+ 페이지 번호). 좌우 17mm 콘텐츠 폭에 맞춘다.
-const footer = `
-  <div style="width:100%; font-family:'Noto Sans KR',sans-serif; -webkit-print-color-adjust:exact;">
-    <div style="margin:0 17mm; border-top:1px solid #e4e1da; padding-top:4px;
-                display:flex; justify-content:space-between;
-                font-size:7px; letter-spacing:.08em; color:#a6a39c;">
-      <span>HWAN CHOI · PORTFOLIO 2026</span>
-      <span class="pageNumber"></span>
-    </div>
-  </div>`;
+for (const key of targets) {
+  const v = VARIANTS[key];
+  const html = buildHTML(data, v);
+  const htmlPath = resolve(__dir, `dist/portfolio-print-${key}.html`);
+  writeFileSync(htmlPath, html);
 
-await page.pdf({
-  path: outPath,
-  format: 'A4',
-  printBackground: true,
-  displayHeaderFooter: true,
-  headerTemplate: '<span></span>',
-  footerTemplate: footer,
-  margin: { top: '18mm', bottom: '16mm', left: '17mm', right: '17mm' },
-});
+  const page = await browser.newPage();
+  await page.goto('file://' + htmlPath, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800); // 웹폰트 로드 대기
+  const outPath = resolve(__dir, `dist/portfolio-${key}.pdf`);
+
+  // 모든 페이지 하단에 규칙적인 구분선(+ 페이지 번호). 좌우 17mm 콘텐츠 폭에 맞춘다.
+  const footer = `
+    <div style="width:100%; font-family:'Noto Sans KR',sans-serif; -webkit-print-color-adjust:exact;">
+      <div style="margin:0 17mm; border-top:1px solid #e3e6e9; padding-top:4px;
+                  display:flex; justify-content:space-between;
+                  font-size:7px; letter-spacing:.08em; color:#9ca3af;">
+        <span>HWAN CHOI · ${esc(v.role).toUpperCase()} · PORTFOLIO 2026</span>
+        <span class="pageNumber"></span>
+      </div>
+    </div>`;
+
+  await page.pdf({
+    path: outPath,
+    format: 'A4',
+    printBackground: true,
+    displayHeaderFooter: true,
+    headerTemplate: '<span></span>',
+    footerTemplate: footer,
+    margin: { top: '18mm', bottom: '16mm', left: '17mm', right: '17mm' },
+  });
+  await page.close();
+  console.log('PDF written:', outPath);
+}
+
 await browser.close();
-console.log('PDF written:', outPath);
