@@ -73,13 +73,39 @@ function CaseDetail({ c }) {
 }
 
 
+// 사이드 목차 — 현재 섹션의 블록으로 건너뛰는 목록.
+// 현재 위치는 표시하지 않습니다(스크롤이 바닥에서 잘리면 실제 위치와 어긋나서).
+// 항목이 하나뿐이면(Landing 등) 목차로서 의미가 없어 그리지 않습니다.
+function SideToc({ items, onJump }) {
+  if (items.length < 2) return null;
+  return (
+    <nav className="x-toc" aria-label="이 섹션의 블록">
+      <div className="lbl">On this page</div>
+      <ul>
+        {items.map((it, i) =>
+          <li key={i}>
+            <button type="button" onClick={() => onJump(i)}>
+              {it.no && <span className="n">{it.no}</span>}
+              <span>{it.label}</span>
+            </button>
+          </li>
+        )}
+      </ul>
+    </nav>
+  );
+}
+
+
 export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariantChange }) {
   const [section, setSection] = useStateC2("landing");
   const [expandedCase, setExpandedCase] = useStateC2(null); // 아코디언으로 펼친 케이스 id
   const [badaTab, setBadaTab] = useStateC2("overview");
   const [slideDir, setSlideDir] = useStateC2(0); // -1: 왼쪽에서, 1: 오른쪽에서
   const [animKey, setAnimKey] = useStateC2(0);
+  const [toc, setToc] = useStateC2([]);        // 사이드 목차 항목
   const scrollRef = useRefC2(null);
+  const colRef = useRefC2(null);               // 현재 섹션의 콘텐츠 칼럼
+  const tocElsRef = useRefC2([]);              // 목차 항목이 가리키는 실제 DOM (측정용)
 
   const v = VARIANTS[variant] || VARIANTS[DEFAULT_VARIANT];
 
@@ -166,6 +192,29 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
       if (idleTimer) window.clearTimeout(idleTimer);
     };
   }, []);
+
+  // ---- 사이드 목차 ----
+  // 섹션이 바뀌면 콘텐츠 칼럼을 훑어 목차를 다시 만듭니다.
+  // 목차에 넣을 블록은 마크업에서 data-toc으로 표시합니다.
+  // (값이 비면 그 요소의 텍스트를, data-toc-no가 있으면 번호를 함께 씁니다)
+  useEffectC2(() => {
+    const col = colRef.current;
+    const nodes = col ? Array.from(col.querySelectorAll("[data-toc]")) : [];
+    tocElsRef.current = nodes;
+    setToc(nodes.map((el) => ({
+      label: el.dataset.toc || el.textContent || "",
+      no: el.dataset.tocNo || ""
+    })));
+  }, [section, variant]);
+
+  const jumpToBlock = (i) => {
+    const el = scrollRef.current;
+    const node = tocElsRef.current[i];
+    if (!el || !node) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const top = el.scrollTop + node.getBoundingClientRect().top - el.getBoundingClientRect().top - 24;
+    el.scrollTo({ top, behavior: reduce ? "auto" : "smooth" });
+  };
 
   // 뉴트럴 팔레트 — 흰 배경 + 그레이 스케일, 액센트는 소량만.
   const vars = {
@@ -429,8 +478,14 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
           padding-left: 32px;
           border-left: 1px solid var(--x-line);
           position: sticky;
-          top: 0;
+          /* .x-frame의 padding-top과 같은 값 — 붙는 순간에도 위 여백이 그대로여야 합니다 */
+          top: 48px;
+          /* 목차가 길어져도 헤더/푸터 밖으로 잘리지 않게 */
+          max-height: calc(100dvh - 180px);
+          overflow-y: auto;
+          scrollbar-width: none;
         }
+        .x-side::-webkit-scrollbar { display: none; }
         .x-side .lbl {
           font-size: 10px;
           letter-spacing: .2em;
@@ -447,6 +502,30 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
           white-space: pre-line;
         }
         .x-side .val b { font-weight: 600; color: var(--x-ink); }
+
+        /* ---------- SIDE TOC ---------- */
+        /* 세로선은 .x-side의 border-left 하나로 충분해서, 항목에는 선을 두지 않습니다 */
+        .x-toc ul { list-style: none; margin: 8px 0 0; padding: 0; }
+        .x-toc button {
+          all: unset;
+          cursor: pointer;
+          display: flex; gap: 8px; align-items: baseline;
+          box-sizing: border-box; width: 100%;
+          padding: 5px 0;
+          font-size: 12.5px;
+          line-height: 1.5;
+          color: var(--x-mute);
+          letter-spacing: -.002em;
+          transition: color .15s;
+        }
+        .x-toc button:hover { color: var(--x-ink); }
+        .x-toc .n {
+          font-family: var(--x-mono);
+          font-size: 10px;
+          letter-spacing: .08em;
+          color: var(--x-soft);
+          flex: 0 0 auto;
+        }
 
         /* ---------- DL ---------- */
         .x-dl { margin: 0; }
@@ -522,6 +601,14 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
           margin: 3px 5px 3px 0;
           letter-spacing: -.002em;
           white-space: nowrap;
+          transition: color .15s, border-color .15s, background .15s;
+        }
+        /* 헤더 토글(.x-vswitch button.on)의 선택 상태와 같은 먹색 채움. 커서는 클릭 대상이 아니라 그대로 */
+        .x-pill:hover {
+          background: var(--x-ink);
+          border-color: var(--x-ink);
+          color: #fff;
+          cursor: default;
         }
         /* ---------- BUTTON ---------- */
         .x-btn {
@@ -671,6 +758,13 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
         }
 
         /* ---------- ACCORDION ---------- */
+        /* 헤드와 펼친 본문이 같은 좌우 리듬을 쓰도록 값을 한곳에 모읍니다 */
+        .x-acc-list {
+          --x-acc-x: 16px;     /* 행 좌우 여백 */
+          --x-acc-no: 48px;    /* 번호 칼럼 */
+          --x-acc-gap: 20px;   /* 칼럼 간격 */
+          --x-acc-chev: 16px;  /* 셰브론 칼럼 */
+        }
         .x-acc { border-bottom: 1px solid var(--x-line-2); }
         .x-acc:first-of-type { border-top: 1px solid var(--x-line); }
         .x-acc.open { background: var(--x-bg-2); }
@@ -679,9 +773,9 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
           box-sizing: border-box;
           display: grid;
           width: 100%;
-          grid-template-columns: 48px 1fr auto;
-          gap: 20px;
-          padding: 22px 16px;
+          grid-template-columns: var(--x-acc-no) 1fr var(--x-acc-chev);
+          gap: var(--x-acc-gap);
+          padding: 22px var(--x-acc-x);
           cursor: pointer;
           align-items: baseline;
           transition: background .15s;
@@ -731,8 +825,12 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
           overflow: hidden;
           animation: accOpen .3s cubic-bezier(.22,.61,.36,1);
         }
+        /* 펼친 본문의 좌우를 헤드의 제목 칼럼에 맞춥니다 (왼쪽=번호 칼럼, 오른쪽=셰브론 칼럼만큼 들여쓰기) */
         .x-acc-grid {
-          padding: 4px 16px 32px 68px;
+          padding-top: 4px;
+          padding-bottom: 32px;
+          padding-left: calc(var(--x-acc-x) + var(--x-acc-no) + var(--x-acc-gap));
+          padding-right: calc(var(--x-acc-x) + var(--x-acc-chev) + var(--x-acc-gap));
         }
         @keyframes accOpen {
           from { opacity: 0; transform: translateY(-6px); }
@@ -927,8 +1025,10 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
           .x-sol, .x-stack-row { grid-template-columns: 1fr; gap: 6px; padding: 16px 0; }
           .x-stack-row { padding-top: 16px; }
 
-          .x-acc-head { grid-template-columns: 32px 1fr auto; gap: 12px; padding: 18px 8px; }
-          .x-acc-grid { padding: 4px 8px 28px; }
+          .x-acc-list { --x-acc-x: 10px; --x-acc-no: 32px; --x-acc-gap: 12px; }
+          .x-acc-head { padding: 18px var(--x-acc-x); }
+          /* 좁은 화면에서는 본문을 들여쓰지 않고 행 여백만 둡니다 */
+          .x-acc-grid { padding-left: var(--x-acc-x); padding-right: var(--x-acc-x); padding-bottom: 28px; }
           .x-case-title { font-size: 18px; }
 
           .x-feat-head { padding: 18px; }
@@ -981,7 +1081,7 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
         <div key={animKey + "-" + variant} className={"x-frame" + (slideDir > 0 ? " x-slide-right" : slideDir < 0 ? " x-slide-left" : "")}>
           {section === "landing" &&
           <>
-              <div>
+              <div ref={colRef}>
                 <div className="x-eyebrow"><span className="bar" /><b>00</b> · Landing</div>
                 <h1 className="x-h1">
                   {data.nameEn}<br />
@@ -1031,6 +1131,7 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
               </div>
 
               <aside className="x-side">
+                <SideToc items={toc} onJump={jumpToBlock} />
                 {(v.sideNotes?.landing || []).map((n, i) =>
                   <div key={i}>
                     <div className="lbl">{n.lbl}</div>
@@ -1043,16 +1144,16 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
 
           {section === "about" &&
           <>
-              <div>
+              <div ref={colRef}>
                 <div className="x-eyebrow"><span className="bar" /><b>01</b> · About</div>
                 <h2 className="x-h2">{v.id === "agent" ? <>사람의 인지에서 출발해<br />에이전트 시스템으로.</> : <>사람의 인지에서 출발해<br />사람이 놓이는 화면으로.</>}</h2>
 
-                <div className="x-section-h">Profile</div>
+                <div className="x-section-h" data-toc="">Profile</div>
                 <div style={{ fontSize: 15.5, lineHeight: 1.9, color: "var(--x-ink-2)", marginBottom: 44, maxWidth: "40em" }}>
                   {v.intro.map((p, i) => <p key={i} style={{ margin: "0 0 1.1em" }}>{p}</p>)}
                 </div>
 
-                <div className="x-section-h">Skills</div>
+                <div className="x-section-h" data-toc="">Skills</div>
                 <dl className="x-dl" style={{ marginBottom: 44 }}>
                   {skillEntries.map(([cat, items]) =>
                 <div key={cat} className="x-dl-row">
@@ -1062,7 +1163,7 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
                 )}
                 </dl>
 
-                <div className="x-section-h">Experience</div>
+                <div className="x-section-h" data-toc="">Experience</div>
                 <div className="x-exp" style={{ marginBottom: 44 }}>
                   <div className="x-exp-head">
                     <div><b>{data.experience.company}</b><span className="role">{data.experience.role}</span></div>
@@ -1078,7 +1179,7 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
                   </ul>
                 </div>
 
-                <div className="x-section-h">Education</div>
+                <div className="x-section-h" data-toc="">Education</div>
                 <dl className="x-dl">
                   {data.education.map((e, i) =>
                 <div key={i} className="x-dl-row">
@@ -1090,30 +1191,21 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
               </div>
 
               <aside className="x-side">
-                <div>
-                  <div className="lbl">Focus</div>
-                  <div className="val">{v.focus}</div>
-                </div>
-                <div>
-                  <div className="lbl">Bridge</div>
-                  <div className="val"><b>심리학 → 엔지니어링</b></div>
-                  <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.65 }}>
-                    사람을 읽던 시선이, 지금은 시스템을 설계하는 일로 이어졌다고 생각합니다.
-                  </div>
-                </div>
+                <SideToc items={toc} onJump={jumpToBlock} />
               </aside>
             </>
           }
 
           {section === "work" &&
               <>
-                <div>
+                <div ref={colRef}>
                   <div className="x-eyebrow"><span className="bar" /><b>02</b> · Work</div>
                   <h2 className="x-h2" style={{ marginBottom: 40 }}>프로젝트 나열이 아닌,<br />문제와 설계의 흐름.</h2>
 
                   {/* ── Featured Case ── */}
                   <div className="x-section-h">Featured Case</div>
-                  <div className="x-feat" style={{ marginBottom: 52 }}>
+                  <div className="x-feat" style={{ marginBottom: 52 }}
+                       data-toc={featured.title} data-toc-no={featured.number}>
                     <div className="x-feat-head">
                       <div className="x-feat-badges">
                         <span className="x-badge">{featured.number}</span>
@@ -1252,7 +1344,8 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
                     {others.map((c) => {
                       const open = expandedCase === c.id;
                       return (
-                        <div key={c.id} className={"x-acc" + (open ? " open" : "")}>
+                        <div key={c.id} className={"x-acc" + (open ? " open" : "")}
+                             data-toc={c.title} data-toc-no={c.number}>
                           <button
                             type="button"
                             className="x-acc-head"
@@ -1289,12 +1382,7 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
                 </div>
 
                 <aside className="x-side">
-                  {(v.sideNotes?.work || []).map((n, i) =>
-                    <div key={i}>
-                      <div className="lbl">{n.lbl}</div>
-                      <div className="val">{n.val}</div>
-                    </div>
-                  )}
+                  <SideToc items={toc} onJump={jumpToBlock} />
                 </aside>
               </>
           }
@@ -1302,7 +1390,7 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
 
           {section === "contact" &&
           <>
-              <div>
+              <div ref={colRef}>
                 <div className="x-eyebrow"><span className="bar" /><b>03</b> · Contact</div>
                 <h2 className="x-h2">
                   {data.contact.heading.split("\n").map((line, i, arr) =>
@@ -1317,6 +1405,7 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
               </div>
 
               <aside className="x-side">
+                <SideToc items={toc} onJump={jumpToBlock} />
                 <div>
                   <div className="lbl">Response time</div>
                   <div className="val"><b>~24h</b></div>
