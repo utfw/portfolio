@@ -1299,7 +1299,7 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
                           {badaTab === "failures" &&
                           <div>
                             <p className="x-note">
-                              루프를 운용하며 마주한 실패를 유형별로 정리했습니다. 무엇이 잘못됐는지보다, 그 실패가 어떤 설계 변경으로 이어졌는지를 남겼습니다.
+                              루프를 운용하며 마주한 실패를 유형별로 정리했습니다.
                             </p>
                             {featured.failureCases.map((f, i) =>
                               <div key={i} className="x-sol">
