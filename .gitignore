@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 docs
+
+# Claude Code (local-only, not for this public repo)
+.claude/
+CLAUDE.md
+make-letter-pdf.mjs
