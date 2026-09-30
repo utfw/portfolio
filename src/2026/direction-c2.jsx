@@ -300,7 +300,7 @@ function CaseStack({ c }) {
 }
 
 // 탭 상세 — Featured로 올라온 케이스 가운데 tabs가 있는 것(예: 프론트엔드 판의 차세대 그리드 엔진).
-// overview 탭은 Challenge·결과·Outcome·Stack을, 나머지 탭은 그 탭의 blocks를 그립니다.
+// overview 탭은 Challenge·결과·Outcome 뒤에 그 탭의 blocks를, 끝에 Stack을 그리고, 나머지 탭은 blocks만 그립니다.
 function TabbedDetail({ c, tab, onTab }) {
   const current = c.tabs.find((t) => t.id === tab) || c.tabs[0];
   return (
@@ -328,6 +328,7 @@ function TabbedDetail({ c, tab, onTab }) {
           <p className="x-note">{c.lessons}</p>
         </>
         }
+        {current.blocks && <CaseBlocks blocks={current.blocks} sections />}
         <CaseStack c={c} />
       </div> :
       <CaseBlocks blocks={current.blocks} sections />
@@ -549,6 +550,9 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
           overflow: hidden;
           -webkit-font-smoothing: antialiased;
           letter-spacing: -.003em;
+          /* 한글 낱말이 줄 끝에서 쪼개지지 않게 합니다 (긴 영문·URL은 넘치지 않게 끊어 줌) */
+          word-break: keep-all;
+          overflow-wrap: break-word;
         }
         .dirX a { color: inherit; text-decoration: none; transition: color .15s; }
         .dirX a:hover { color: var(--x-accent); }
@@ -1323,11 +1327,6 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
         .x-tbl td { color: var(--x-ink-2); }
         /* 짧은 값만 들어가는 칸(data의 nowrap)은 줄을 꺾지 않습니다 */
         .x-tbl td.nw { white-space: nowrap; }
-        /* 좁은 칸에서 한글 낱말 중간이 끊기지 않게 합니다 (긴 영문은 넘치지 않게 끊어 줌) */
-        .x-tbl th, .x-tbl td, .x-col li, .x-flow-h, .x-flow-d, .x-sol h4, .x-sol h5 {
-          word-break: keep-all;
-          overflow-wrap: break-word;
-        }
         .x-tbl tbody tr:last-child > * { border-bottom: 0; }
         .x-code {
           margin: 0;
@@ -1561,10 +1560,10 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
           <>
               <div ref={colRef}>
                 <div className="x-eyebrow"><span className="bar" /><b>01</b> · About</div>
-                <h2 className="x-h2">{v.id === "agent" ? <>사람의 인지에서 출발해<br />에이전트 시스템으로.</> : <>사람의 인지에서 출발해<br />사람이 놓이는 화면으로.</>}</h2>
+                <h2 className="x-h2">{v.id === "agent" ? <>사람의 인지에서 출발해<br />에이전트 시스템으로.</> : <>사람의 인지에서 출발해<br />사람이 쓰는 화면으로.</>}</h2>
 
                 <div className="x-section-h" data-toc="">Profile</div>
-                <div style={{ fontSize: 15.5, lineHeight: 1.9, color: "var(--x-ink-2)", marginBottom: 44, maxWidth: "40em" }}>
+                <div style={{ fontSize: 15.5, lineHeight: 1.9, color: "var(--x-ink-2)", marginBottom: 44 }}>
                   {v.intro.map((p, i) => <p key={i} style={{ margin: "0 0 1.1em" }}>{p}</p>)}
                 </div>
 
@@ -1615,7 +1614,7 @@ export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariant
               <>
                 <div ref={colRef}>
                   <div className="x-eyebrow"><span className="bar" /><b>02</b> · Work</div>
-                  <h2 className="x-h2" style={{ marginBottom: 40 }}>프로젝트 나열이 아닌,<br />문제와 설계의 흐름.</h2>
+                  <h2 className="x-h2" style={{ marginBottom: 40 }}>무엇에 부딪혔고,<br />무엇을 정했는지.</h2>
 
                   {/* ── Featured Case ── */}
                   <div className="x-section-h">Featured Case</div>
