@@ -1,0 +1,1768 @@
+import React from 'react';
+import { VARIANTS, DEFAULT_VARIANT } from './variants.jsx';
+
+const { useState: useStateC2, useEffect: useEffectC2, useRef: useRefC2, useMemo: useMemoC2 } = React;
+
+const C2_SECTIONS = [
+{ id: "landing", no: "00", label: "Landing" },
+{ id: "about", no: "01", label: "About" },
+{ id: "work", no: "02", label: "Work" },
+{ id: "contact", no: "03", label: "Contact" }];
+
+// Bada 상세는 분량이 많아 탭으로 나눕니다.
+const BADA_TABS = [
+{ id: "overview", label: "Overview" },
+{ id: "architecture", label: "Architecture" },
+{ id: "failures", label: "Failure Analysis" },
+{ id: "evaluation", label: "Evaluation" }];
+
+// 렌더 중 정의하면 매 렌더마다 remount되므로 컴포넌트 밖에 둡니다.
+function VariantSwitch({ current, onChange, compact }) {
+  return (
+    <div className={"x-vswitch" + (compact ? " compact" : "")} role="group" aria-label="포트폴리오 버전 선택">
+      {Object.values(VARIANTS).map((item) =>
+        <button
+          key={item.id}
+          type="button"
+          className={item.id === current ? "on" : ""}
+          aria-pressed={item.id === current}
+          onClick={() => onChange && onChange(item.id)}>
+          {item.label}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// 문자열 안의 `…`를 인라인 코드로 그립니다 (케이스 블록 전용)
+function Inline({ text }) {
+  return String(text).split("`").map((part, i) =>
+    i % 2 ? <code key={i} className="x-ic">{part}</code> : <React.Fragment key={i}>{part}</React.Fragment>
+  );
+}
+
+// 케이스 본문 블록 — 도식·표·타임라인처럼 문단으로 옮기기 어려운 근거를 보여 줍니다.
+// 블록마다 lead(도식 앞 문단) → kind별 도식 → note(도식 뒤 문단) → bullets 순서로 그립니다.
+// sections: 탭 안에서 쓸 때. 번호 붙은 제목 대신 다른 탭과 같은 섹션 제목(x-section-h)으로 그립니다.
+function CaseBlocks({ blocks, sections = false }) {
+  return (
+    <div className={"x-blks" + (sections ? " sections" : "")}>
+      {blocks.map((b, i) =>
+        <section key={i} className="x-blk">
+          {sections ?
+          <h4 className="x-section-h x-blk-label">{b.h}</h4> :
+          <h4 className="x-blk-h"><span className="n">{String(i + 1).padStart(2, "0")}</span>{b.h}</h4>
+          }
+          {b.lead && <p className="x-blk-p lead"><Inline text={b.lead} /></p>}
+
+          {b.kind === "columns" &&
+          <div className="x-cols">
+            {b.cols.map((col, j) =>
+              <div key={j} className="x-col">
+                <div className="x-col-h">{col.h}</div>
+                <ul>{col.items.map((t, k) => <li key={k}><Inline text={t} /></li>)}</ul>
+              </div>
+            )}
+          </div>
+          }
+
+          {b.kind === "flow" &&
+          <ol className="x-flow">
+            {b.items.map((s, j) =>
+              <li key={j} className="x-flow-step">
+                <span className="x-flow-n">{String(j + 1).padStart(2, "0")}</span>
+                <div className="x-flow-h">{s.h}</div>
+                <p className="x-flow-d"><Inline text={s.d} /></p>
+              </li>
+            )}
+          </ol>
+          }
+
+          {b.kind === "table" &&
+          <div className="x-tbl-wrap">
+            <table className="x-tbl">
+              <thead>
+                <tr>{b.head.map((t, j) => <th key={j} scope="col">{t}</th>)}</tr>
+              </thead>
+              <tbody>
+                {b.rows.map((row, j) =>
+                  <tr key={j}>
+                    {row.map((cell, k) => k === 0 ?
+                      <th key={k} scope="row"><Inline text={cell} /></th> :
+                      <td key={k} className={b.nowrap && b.nowrap.includes(k) ? "nw" : undefined}><Inline text={cell} /></td>
+                    )}
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          }
+
+          {b.kind === "steps" &&
+          <ol className="x-focus">
+            {b.items.map((s, j) =>
+              <li key={j} className="x-focus-item">
+                <span className="n">{String(j + 1).padStart(2, "0")}</span>
+                <div>
+                  <div className="h">{s.h}</div>
+                  <div className="d"><Inline text={s.d} /></div>
+                </div>
+              </li>
+            )}
+          </ol>
+          }
+
+          {b.kind === "rows" &&
+          <div>
+            {b.items.map((s, j) =>
+              <div key={j} className="x-sol">
+                <h5>{s.h}</h5>
+                <p><Inline text={s.d} /></p>
+              </div>
+            )}
+          </div>
+          }
+
+          {b.kind === "code" && <pre className="x-code">{b.code}</pre>}
+
+          {b.note && <p className="x-blk-p"><Inline text={b.note} /></p>}
+
+          {b.bullets &&
+          <ul className="x-bul">
+            {b.bullets.map((t, j) => <li key={j}><Inline text={t} /></li>)}
+          </ul>
+          }
+        </section>
+      )}
+    </div>
+  );
+}
+
+// Bada 상세판 — 분량이 많아 탭으로 나눕니다. Bada가 Featured일 때(에이전트 판)만 씁니다.
+// 프론트엔드 판에서는 아코디언의 간단판(data의 blocks·results·stack)으로 보입니다.
+function BadaDetail({ c, tab, onTab }) {
+  return (
+    <>
+      <div className="x-tabs" role="tablist">
+        {BADA_TABS.map((t) =>
+          <button key={t.id} role="tab" aria-selected={tab === t.id}
+            className={tab === t.id ? "on" : ""}
+            onClick={() => onTab(t.id)}>
+            {t.label}
+          </button>
+        )}
+      </div>
+
+      {tab === "overview" &&
+      <div>
+        <div className="x-section-h">Problem</div>
+        <p style={{ fontSize: 15, lineHeight: 1.85, margin: "0 0 32px", color: "var(--x-ink-2)", maxWidth: "40em" }}>{c.problem}</p>
+
+        <div className="x-section-h">Results</div>
+        <div className="x-results-grid" style={{ marginBottom: 32 }}>
+          {c.results.map((m, i) =>
+            <div key={i} className="x-metric">
+              <div className="k">{m.k}</div>
+              <div className="v">{m.v}</div>
+            </div>
+          )}
+        </div>
+
+        <div className="x-section-h">Outcome</div>
+        <p className="x-note" style={{ marginBottom: 0 }}>{c.lessons}</p>
+      </div>
+      }
+
+      {tab === "architecture" &&
+      <div>
+        <div className="x-section-h">Pipeline</div>
+        <div className="x-pipe">
+          {c.pipeline.map((p, i) =>
+            <div className="x-pipe-stage" key={p.stage}>
+              <div className="x-pipe-idx">{String(i + 1).padStart(2, "0")}</div>
+              <div className="x-pipe-name">{p.stage}</div>
+              <div className="x-pipe-tool">{p.tool}</div>
+              <div className="x-pipe-rows">
+                <span>{p.role}</span>
+                <span>{p.out}</span>
+              </div>
+            </div>
+          )}
+        </div>
+        {c.pipelineNote && <p className="x-note">{c.pipelineNote}</p>}
+
+        <div className="x-section-h">Design Decisions</div>
+        <div style={{ marginBottom: 32 }}>
+          {c.solution.map((s, i) =>
+            <div key={i} className="x-sol">
+              <h4>{s.h}</h4>
+              <p>{s.d}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="x-section-h">Evolution</div>
+        <div>
+          {c.evolution.map((p, i) =>
+            <div key={i} className="x-sol">
+              <h4><span className="ph">{p.phase}</span>{p.title}</h4>
+              <p>{p.body}</p>
+            </div>
+          )}
+        </div>
+      </div>
+      }
+
+      {tab === "failures" &&
+      <div>
+        <p className="x-note">
+          루프를 운용하며 마주한 실패를 유형별로 정리했습니다.
+        </p>
+        {c.failureCases.map((f, i) =>
+          <div key={i} className="x-sol">
+            <h4><span className="ph">{f.type}</span>{f.title}</h4>
+            <p>{f.body}</p>
+          </div>
+        )}
+      </div>
+      }
+
+      {tab === "evaluation" && <CaseBlocks blocks={c.evaluation} sections />}
+    </>
+  );
+}
+
+// 케이스 상세 본문 (Approach 또는 Solution / Results / Limits / Stack) — 아코디언과 Featured가 공유
+function CaseDetail({ c }) {
+  return (
+    <>
+      {c.blocks ?
+      <>
+        <div className="x-section-h">Approach</div>
+        <CaseBlocks blocks={c.blocks} />
+      </> :
+      <>
+        <div className="x-section-h">Solution</div>
+        <div style={{ marginBottom: 28 }}>
+          {c.solution.map((s, i) =>
+            <div key={i} className="x-sol">
+              <h4>{s.h}</h4>
+              <p>{s.d}</p>
+            </div>
+          )}
+        </div>
+      </>
+      }
+
+      <CaseTiles c={c} />
+
+      {c.limits &&
+      <>
+        <div className="x-section-h">Limits</div>
+        <ul className="x-bul" style={{ margin: "0 0 28px" }}>
+          {c.limits.map((t, i) => <li key={i}><Inline text={t} /></li>)}
+        </ul>
+      </>
+      }
+
+      <CaseStack c={c} />
+    </>
+  );
+}
+
+// 결과 타일 — 수치는 results(큰 숫자), 수치가 아닌 사실은 metrics(글자)로 둡니다
+function CaseTiles({ c }) {
+  const tiles = c.metrics || c.results;
+  if (!tiles) return null;
+  return (
+    <>
+      <div className="x-section-h">{c.metricsLabel || "Results"}</div>
+      <div className="x-results-grid" style={{ marginBottom: 28 }}>
+        {tiles.map((m, i) =>
+          <div key={i} className={"x-metric" + (c.metrics ? " text" : "")}>
+            <div className="k">{m.k}</div>
+            <div className="v">{m.v}</div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function CaseStack({ c }) {
+  if (!c.stack) return null;
+  return (
+    <div className="x-stack-row">
+      <span className="x-stack-lbl">Stack</span>
+      <div className="x-pills">{c.stack.map((s) => <span key={s} className="x-pill">{s}</span>)}</div>
+    </div>
+  );
+}
+
+// 탭 상세 — Featured로 올라온 케이스 가운데 tabs가 있는 것(예: 프론트엔드 판의 차세대 그리드 엔진).
+// overview 탭은 Challenge·결과·Outcome·Stack을, 나머지 탭은 그 탭의 blocks를 그립니다.
+function TabbedDetail({ c, tab, onTab }) {
+  const current = c.tabs.find((t) => t.id === tab) || c.tabs[0];
+  return (
+    <>
+      <div className="x-tabs" role="tablist">
+        {c.tabs.map((t) =>
+          <button key={t.id} role="tab" aria-selected={current.id === t.id}
+            className={current.id === t.id ? "on" : ""}
+            onClick={() => onTab(t.id)}>
+            {t.label}
+          </button>
+        )}
+      </div>
+
+      {current.id === "overview" ?
+      <div>
+        <div className="x-section-h">Challenge</div>
+        <p style={{ fontSize: 15, lineHeight: 1.85, margin: "0 0 32px", color: "var(--x-ink-2)", maxWidth: "40em" }}>
+          {c.challenge || c.problem}
+        </p>
+        <CaseTiles c={c} />
+        {c.lessons &&
+        <>
+          <div className="x-section-h">Outcome</div>
+          <p className="x-note">{c.lessons}</p>
+        </>
+        }
+        <CaseStack c={c} />
+      </div> :
+      <CaseBlocks blocks={current.blocks} sections />
+      }
+    </>
+  );
+}
+
+
+// 사이드 목차 — 현재 섹션의 블록으로 건너뛰는 목록.
+// 현재 위치는 표시하지 않습니다(스크롤이 바닥에서 잘리면 실제 위치와 어긋나서).
+// 항목이 하나뿐이면(Landing 등) 목차로서 의미가 없어 그리지 않습니다.
+function SideToc({ items, onJump }) {
+  if (items.length < 2) return null;
+  return (
+    <nav className="x-toc" aria-label="이 섹션의 블록">
+      <div className="lbl">On this page</div>
+      <ul>
+        {items.map((it, i) =>
+          <li key={i}>
+            <button type="button" onClick={() => onJump(i)}>
+              {it.no && <span className="n">{it.no}</span>}
+              <span>{it.label}</span>
+            </button>
+          </li>
+        )}
+      </ul>
+    </nav>
+  );
+}
+
+
+export default function DirectionC2({ data, variant = DEFAULT_VARIANT, onVariantChange }) {
+  const [section, setSection] = useStateC2("landing");
+  const [expandedCase, setExpandedCase] = useStateC2(null); // 아코디언으로 펼친 케이스 id
+  const [featTab, setFeatTab] = useStateC2("overview"); // Featured 케이스의 탭 (Bada 또는 tabs가 있는 케이스)
+  const [slideDir, setSlideDir] = useStateC2(0); // -1: 왼쪽에서, 1: 오른쪽에서
+  const [animKey, setAnimKey] = useStateC2(0);
+  const [toc, setToc] = useStateC2([]);        // 사이드 목차 항목
+  const scrollRef = useRefC2(null);
+  const colRef = useRefC2(null);               // 현재 섹션의 콘텐츠 칼럼
+  const tocElsRef = useRefC2([]);              // 목차 항목이 가리키는 실제 DOM (측정용)
+
+  const v = VARIANTS[variant] || VARIANTS[DEFAULT_VARIANT];
+
+  const sectionIdx = C2_SECTIONS.findIndex((s) => s.id === section);
+  const current = C2_SECTIONS[sectionIdx];
+
+  const goSectionById = (id) => {
+    setSection((cur) => {
+      const curIdx = C2_SECTIONS.findIndex((s) => s.id === cur);
+      const nextIdx = C2_SECTIONS.findIndex((s) => s.id === id);
+      if (nextIdx === curIdx) return cur;
+      setSlideDir(nextIdx > curIdx ? 1 : -1);
+      setAnimKey((k) => k + 1);
+      setExpandedCase(null);
+      return id;
+    });
+  };
+
+  useEffectC2(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+  }, [section, variant]);
+
+  // variant가 바뀌면 펼쳐둔 상태를 초기화 (다른 케이스 목록이므로)
+  useEffectC2(() => {
+    setExpandedCase(null);
+    setFeatTab("overview");
+  }, [variant]);
+
+  // ---- 좌우 제스처: 트랙패드 가로 스크롤 + Shift+휠 ----
+  useEffectC2(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    // 한 제스처당 한 섹션만 이동.
+    // 트랙패드 관성으로 wheel 이벤트가 길게 이어지므로,
+    // 발화 후에는 "이벤트가 일정 시간 멈출 때까지" 잠금을 유지한다(=손가락을 뗄 때까지).
+    let locked = false;
+    let accum = 0;
+    let idleTimer = null;
+
+    // 인접 섹션으로 한 칸 이동. 양 끝에서는 멈춤.
+    // setSection이 함수형 업데이트라 최신 state를 클로저로 붙잡을 필요가 없습니다.
+    const goStep = (dir) => {
+      setSection((cur) => {
+        const curIdx = C2_SECTIONS.findIndex((s) => s.id === cur);
+        const nextIdx = curIdx + dir;
+        if (nextIdx < 0 || nextIdx >= C2_SECTIONS.length) return cur;
+        setSlideDir(dir);
+        setAnimKey((k) => k + 1);
+        setExpandedCase(null);
+        return C2_SECTIONS[nextIdx].id;
+      });
+    };
+
+    const scheduleIdle = (delay) => {
+      if (idleTimer) window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(() => {
+        accum = 0;
+        locked = false; // 관성이 멎으면 다음 스윕 허용
+      }, delay);
+    };
+
+    const onWheel = (e) => {
+      // Shift+휠은 deltaY를 가로 의도로 사용, 그 외에는 트랙패드 가로 스크롤(deltaX)
+      const dx = e.shiftKey ? (e.deltaX || e.deltaY) : e.deltaX;
+      const vy = e.shiftKey ? 0 : e.deltaY;
+      if (Math.abs(dx) <= Math.abs(vy)) return; // 세로 스크롤 의도면 그대로
+      e.preventDefault();
+
+      if (locked) { scheduleIdle(200); return; } // 잠긴 동안의 관성은 흡수
+
+      accum += dx;
+      scheduleIdle(200);
+      if (Math.abs(accum) > 90) {
+        locked = true;
+        accum = 0;
+        goStep(dx > 0 ? 1 : -1);
+      }
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      if (idleTimer) window.clearTimeout(idleTimer);
+    };
+  }, []);
+
+  // ---- 사이드 목차 ----
+  // 섹션이 바뀌면 콘텐츠 칼럼을 훑어 목차를 다시 만듭니다.
+  // 목차에 넣을 블록은 마크업에서 data-toc으로 표시합니다.
+  // (값이 비면 그 요소의 텍스트를, data-toc-no가 있으면 번호를 함께 씁니다)
+  useEffectC2(() => {
+    const col = colRef.current;
+    const nodes = col ? Array.from(col.querySelectorAll("[data-toc]")) : [];
+    tocElsRef.current = nodes;
+    setToc(nodes.map((el) => ({
+      label: el.dataset.toc || el.textContent || "",
+      no: el.dataset.tocNo || ""
+    })));
+  }, [section, variant]);
+
+  // 블록을 콘텐츠 영역 상단(24px 아래)에 맞춥니다.
+  const scrollNodeToTop = (node) => {
+    const el = scrollRef.current;
+    if (!el || !node) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const top = el.scrollTop + node.getBoundingClientRect().top - el.getBoundingClientRect().top - 24;
+    el.scrollTo({ top, behavior: reduce ? "auto" : "smooth" });
+  };
+
+  const jumpToBlock = (i) => scrollNodeToTop(tocElsRef.current[i]);
+
+  // 케이스를 펼치면 그 헤드를 위로 올립니다.
+  // (본문이 헤드 아래로 길게 열리므로, 누른 자리에 그대로 두면 본문이 화면 밖에 남습니다)
+  // 이 시점엔 본문이 이미 DOM에 있어 스크롤 높이가 반영된 상태입니다.
+  useEffectC2(() => {
+    if (!expandedCase) return;
+    scrollNodeToTop(colRef.current?.querySelector(".x-acc.open"));
+  }, [expandedCase]);
+
+  // 뉴트럴 팔레트 — 흰 배경 + 그레이 스케일, 액센트는 소량만.
+  const vars = {
+    "--x-bg": "#ffffff",
+    "--x-bg-2": "#f6f7f8",
+    "--x-bg-3": "#eef0f2",
+    "--x-ink": "#14171a",
+    "--x-ink-2": "#3d4348",
+    "--x-mute": "#6b7280",
+    "--x-soft": "#9ca3af",
+    "--x-line": "#e3e6e9",
+    "--x-line-2": "#eef0f2",
+    "--x-accent": "#1257c7",
+    "--x-sans": "'Noto Sans KR', 'Noto Sans', system-ui, -apple-system, sans-serif",
+    "--x-mono": "ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace"
+  };
+
+  // variant의 caseOrder대로 정렬. 목록에 없는 케이스는 원래 순서로 뒤에 붙임.
+  const cases = useMemoC2(() => {
+    const order = v.caseOrder || [];
+    const rank = (c) => {
+      const i = order.indexOf(c.id);
+      return i === -1 ? order.length + Number(c.number) : i;
+    };
+    // 표시 번호는 variant 순서에 맞춰 다시 매깁니다 (data의 number는 고정값이라 순서와 어긋남).
+    return [...data.caseStudies]
+      .sort((a, b) => rank(a) - rank(b))
+      .map((c, i) => ({ ...c, number: String(i + 1).padStart(2, "0") }));
+  }, [data.caseStudies, v.caseOrder]);
+
+  // variant의 skillOrder대로 Skills 재정렬
+  const skillEntries = useMemoC2(() => {
+    const order = v.skillOrder || [];
+    return Object.entries(data.skills).sort((a, b) => {
+      const ia = order.indexOf(a[0]), ib = order.indexOf(b[0]);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    });
+  }, [data.skills, v.skillOrder]);
+
+  const featured = cases.find((c) => c.id === v.featuredId) || cases[0];
+  const others = cases.filter((c) => c.id !== featured.id);
+
+  const vswitch = (compact) => <VariantSwitch current={v.id} onChange={onVariantChange} compact={compact} />;
+
+  return (
+    <div className="dirX" style={vars}>
+      <style>{`
+        .dirX {
+          width: 100%; height: 100%;
+          background: var(--x-bg);
+          color: var(--x-ink);
+          font-family: var(--x-sans);
+          font-size: 16px;
+          line-height: 1.75;
+          font-weight: 400;
+          display: grid;
+          grid-template-rows: auto 1fr auto;
+          overflow: hidden;
+          -webkit-font-smoothing: antialiased;
+          letter-spacing: -.003em;
+        }
+        .dirX a { color: inherit; text-decoration: none; transition: color .15s; }
+        .dirX a:hover { color: var(--x-accent); }
+        .dirX p { text-wrap: pretty; }
+        .dirX *:focus-visible {
+          outline: 2px solid var(--x-accent);
+          outline-offset: 2px;
+        }
+
+        /* ---------- HEADER ---------- */
+        .x-header {
+          border-bottom: 1px solid var(--x-line);
+          background: var(--x-bg);
+          /* 좌우 여백은 .x-main과 같게 바깥에 두어 탭·스위치가 본문 가장자리와 맞습니다 */
+          padding: 0 64px;
+        }
+        .x-header-inner {
+          max-width: 1180px;
+          width: 100%;
+          /* padding까지 폭에 넣어야 화면보다 넓어지지 않습니다 (넘치면 클릭할 때 .dirX가 가로로 밀림) */
+          box-sizing: border-box;
+          margin: 0 auto;
+          padding: 18px 0;
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 40px;
+          align-items: center;
+        }
+        .x-nav {
+          display: flex;
+          gap: 28px;
+          justify-content: flex-start;
+        }
+        .x-nav button {
+          all: unset; cursor: pointer;
+          font-size: 14.5px;
+          letter-spacing: .005em;
+          color: var(--x-mute);
+          padding: 6px 2px;
+          position: relative;
+          transition: color .18s;
+        }
+        .x-nav button:hover { color: var(--x-ink); }
+        .x-nav button.active { color: var(--x-ink); font-weight: 500; }
+        .x-nav button.active::after {
+          content: ''; position: absolute;
+          left: 0; right: 0; bottom: -1px;
+          height: 2px;
+          background: var(--x-accent);
+        }
+
+        /* ---------- VARIANT SWITCH ---------- */
+        .x-vswitch {
+          display: inline-flex;
+          border: 1px solid var(--x-line);
+          border-radius: 3px;
+          overflow: hidden;
+          flex: 0 0 auto;
+        }
+        .x-vswitch button {
+          all: unset;
+          cursor: pointer;
+          padding: 6px 14px;
+          font-size: 12.5px;
+          font-weight: 500;
+          color: var(--x-mute);
+          letter-spacing: -.002em;
+          transition: background .15s, color .15s;
+          white-space: nowrap;
+        }
+        .x-vswitch button + button { border-left: 1px solid var(--x-line); }
+        .x-vswitch button:hover { background: var(--x-bg-2); color: var(--x-ink); }
+        .x-vswitch button.on {
+          background: var(--x-ink);
+          color: #fff;
+        }
+        .x-vswitch.compact button { padding: 5px 11px; font-size: 12px; }
+
+        /* ---------- MAIN (top-aligned, scrollable) ---------- */
+        .x-main {
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-start;
+          overflow-y: auto;
+          overscroll-behavior-x: contain;
+          padding: 0 64px;
+        }
+        .x-frame {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 260px;
+          gap: 72px;
+          width: 100%;
+          max-width: 1180px;
+          margin: 0 auto;
+          padding: 48px 0 72px;
+          flex-shrink: 0;
+          align-items: start;
+        }
+        /* grid 자식이 콘텐츠 폭으로 부풀어 트랙 밖으로 넘치는 것 방지 */
+        .x-frame > * { min-width: 0; }
+
+        /* ---------- TYPE ---------- */
+        .x-eyebrow {
+          font-size: 11px;
+          letter-spacing: .2em;
+          text-transform: uppercase;
+          color: var(--x-mute);
+          font-weight: 600;
+          margin-bottom: 20px;
+          display: flex; align-items: center; gap: 12px;
+        }
+        .x-eyebrow b {
+          color: var(--x-accent);
+          font-weight: 600;
+          letter-spacing: .1em;
+        }
+        .x-eyebrow .bar {
+          flex: 0 0 24px; height: 2px;
+          background: var(--x-accent);
+        }
+
+        .x-h1 {
+          font-weight: 600;
+          font-size: 44px;
+          line-height: 1.18;
+          letter-spacing: -.032em;
+          margin: 0 0 20px;
+        }
+        .x-h1 .em { color: var(--x-mute); font-weight: 400; }
+        .x-h2 {
+          font-weight: 600;
+          font-size: 30px;
+          line-height: 1.26;
+          letter-spacing: -.028em;
+          margin: 0 0 18px;
+        }
+        .x-lede {
+          font-size: 17.5px;
+          line-height: 1.68;
+          color: var(--x-ink-2);
+          letter-spacing: -.008em;
+          margin: 0 0 28px;
+          max-width: 36em;
+        }
+        .x-section-h {
+          font-size: 11px;
+          letter-spacing: .2em;
+          text-transform: uppercase;
+          color: var(--x-mute);
+          font-weight: 600;
+          margin: 0 0 16px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--x-line);
+        }
+        .x-section-h.plain { border-bottom: 0; padding-bottom: 0; }
+
+        /* ---------- SLIDE ANIMATION ---------- */
+        @keyframes slideInFromRight {
+          from { opacity: 0; transform: translateX(40px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes slideInFromLeft {
+          from { opacity: 0; transform: translateX(-40px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
+        .x-slide-right { animation: slideInFromRight .3s cubic-bezier(.22,.61,.36,1) both; }
+        .x-slide-left  { animation: slideInFromLeft  .3s cubic-bezier(.22,.61,.36,1) both; }
+        @media (prefers-reduced-motion: reduce) {
+          .x-slide-right, .x-slide-left, .x-acc-body { animation: none !important; }
+          .dirX * { transition: none !important; }
+        }
+
+        /* ---------- SIDE COLUMN ---------- */
+        .x-side {
+          font-size: 13px;
+          color: var(--x-mute);
+          line-height: 1.7;
+          display: grid; gap: 20px;
+          padding-left: 32px;
+          border-left: 1px solid var(--x-line);
+          position: sticky;
+          /* .x-frame의 padding-top과 같은 값 — 붙는 순간에도 위 여백이 그대로여야 합니다 */
+          top: 48px;
+          /* 목차가 길어져도 헤더/푸터 밖으로 잘리지 않게 */
+          max-height: calc(100dvh - 180px);
+          overflow-y: auto;
+          scrollbar-width: none;
+        }
+        .x-side::-webkit-scrollbar { display: none; }
+        .x-side .lbl {
+          font-size: 10px;
+          letter-spacing: .2em;
+          text-transform: uppercase;
+          color: var(--x-soft);
+          margin-bottom: 6px;
+          font-weight: 600;
+        }
+        .x-side .val {
+          color: var(--x-ink-2);
+          font-size: 13.5px;
+          line-height: 1.65;
+          letter-spacing: -.004em;
+          white-space: pre-line;
+        }
+        .x-side .val b { font-weight: 600; color: var(--x-ink); }
+
+        /* ---------- SIDE TOC ---------- */
+        /* 세로선은 .x-side의 border-left 하나로 충분해서, 항목에는 선을 두지 않습니다 */
+        .x-toc ul { list-style: none; margin: 8px 0 0; padding: 0; }
+        .x-toc button {
+          all: unset;
+          cursor: pointer;
+          display: flex; gap: 8px; align-items: baseline;
+          box-sizing: border-box; width: 100%;
+          padding: 5px 0;
+          font-size: 12.5px;
+          line-height: 1.5;
+          color: var(--x-mute);
+          letter-spacing: -.002em;
+          transition: color .15s;
+        }
+        .x-toc button:hover { color: var(--x-ink); }
+        .x-toc .n {
+          font-family: var(--x-mono);
+          font-size: 10px;
+          letter-spacing: .08em;
+          color: var(--x-soft);
+          flex: 0 0 auto;
+        }
+
+        /* ---------- DL ---------- */
+        .x-dl { margin: 0; }
+        .x-dl-row {
+          display: grid; grid-template-columns: 150px 1fr;
+          gap: 24px;
+          padding: 16px 0;
+          border-bottom: 1px solid var(--x-line-2);
+          align-items: baseline;
+        }
+        .x-dl-row:first-of-type { border-top: 1px solid var(--x-line); }
+        .x-dl-row:last-of-type { border-bottom: 1px solid var(--x-line); }
+        /* 섹션 헤딩(밑줄 있음) 바로 뒤에 오는 블록은 자기 윗선을 지운다 — 이중선 방지 */
+        .x-section-h + .x-dl .x-dl-row:first-of-type,
+        .x-section-h + .x-acc-list .x-acc:first-of-type,
+        .x-section-h + * > .x-sol:first-child,
+        .x-section-h + .x-focus .x-focus-item:first-child,
+        .x-section-h + .x-sol { border-top: 0; }
+        .x-dl-row dt {
+          font-size: 11px;
+          letter-spacing: .14em;
+          text-transform: uppercase;
+          color: var(--x-mute);
+          font-weight: 600;
+        }
+        .x-dl-row dd {
+          margin: 0;
+          font-size: 15px;
+          line-height: 1.7;
+          letter-spacing: -.003em;
+        }
+        .x-dl-row dd b { font-weight: 600; }
+
+        /* ---------- EXPERIENCE TIMELINE ---------- */
+        .x-exp-head {
+          display: flex; align-items: baseline; justify-content: space-between;
+          gap: 16px;
+          padding-bottom: 14px;
+          border-bottom: 1px solid var(--x-line);
+        }
+        .x-exp-head b { font-weight: 600; font-size: 16px; letter-spacing: -.008em; }
+        .x-exp-head .role { color: var(--x-mute); font-size: 14px; margin-left: 8px; }
+        .x-exp-period {
+          font-size: 12px; color: var(--x-mute);
+          letter-spacing: .02em; white-space: nowrap;
+          font-variant-numeric: tabular-nums;
+        }
+        .x-timeline { list-style: none; margin: 2px 0 0; padding: 0; }
+        .x-timeline li {
+          display: grid; grid-template-columns: 76px 1fr; gap: 20px;
+          padding: 11px 0; align-items: baseline;
+          font-size: 14.5px; line-height: 1.6;
+          border-bottom: 1px solid var(--x-line-2);
+        }
+        .x-timeline li:last-child { border-bottom: 0; }
+        .x-timeline .t-date {
+          font-size: 12px; color: var(--x-mute); letter-spacing: .02em;
+          font-variant-numeric: tabular-nums;
+          font-family: var(--x-mono);
+        }
+        .x-timeline li.now .t-date { color: var(--x-accent); }
+        .x-timeline li.now b { color: var(--x-accent); font-weight: 600; }
+
+        /* ---------- PILL ---------- */
+        /* 필은 묶음(.x-pills)이 flex로 흘립니다. 개수가 늘어 줄바꿈돼도 간격이 같고,
+           inline-block처럼 줄 간격이 line-height에 끌려가지 않습니다. */
+        .x-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+        .x-pill {
+          display: inline-block;
+          padding: 4px 10px;
+          font-size: 12px;
+          background: var(--x-bg-2);
+          border: 1px solid var(--x-line);
+          border-radius: 3px;
+          color: var(--x-ink-2);
+          letter-spacing: -.002em;
+          white-space: nowrap;
+          transition: color .15s, border-color .15s, background .15s;
+        }
+        /* 헤더 토글(.x-vswitch button.on)의 선택 상태와 같은 먹색 채움. 커서는 클릭 대상이 아니라 그대로 */
+        .x-pill:hover {
+          background: var(--x-ink);
+          border-color: var(--x-ink);
+          color: #fff;
+          cursor: default;
+        }
+        /* ---------- BUTTON ---------- */
+        .x-btn {
+          all: unset; cursor: pointer;
+          padding: 11px 22px;
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--x-ink);
+          border: 1px solid var(--x-line);
+          border-radius: 3px;
+          letter-spacing: -.005em;
+          transition: background .15s, color .15s, border-color .15s;
+        }
+        .x-btn:hover { background: var(--x-bg-2); border-color: var(--x-soft); }
+        .x-btn-primary {
+          background: var(--x-ink);
+          border-color: var(--x-ink);
+          color: #fff;
+        }
+        .x-btn-primary:hover {
+          background: var(--x-accent);
+          border-color: var(--x-accent);
+          color: #fff;
+        }
+
+        /* ---------- FEATURED CARD ---------- */
+        .x-feat {
+          border: 1px solid var(--x-line);
+          border-radius: 4px;
+          overflow: hidden;
+        }
+        .x-feat-head {
+          padding: 22px 26px;
+          background: var(--x-bg-2);
+          border-bottom: 1px solid var(--x-line);
+        }
+        .x-feat-badges {
+          display: flex; flex-wrap: wrap; align-items: center;
+          gap: 10px; margin-bottom: 12px;
+        }
+        .x-badge {
+          font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+          font-weight: 600; padding: 3px 8px; border-radius: 2px;
+          background: var(--x-accent); color: #fff;
+        }
+        .x-badge.ghost {
+          background: transparent; color: var(--x-mute);
+          border: 1px solid var(--x-line); font-weight: 500;
+        }
+        .x-feat-title {
+          font-size: 25px; font-weight: 600;
+          letter-spacing: -.024em; margin-bottom: 8px;
+        }
+        .x-feat-sub {
+          font-size: 15px; color: var(--x-mute);
+          line-height: 1.65; margin: 0;
+        }
+        .x-feat-body { padding: 26px; }
+
+        /* ---------- TABS ---------- */
+        .x-tabs {
+          display: flex; gap: 2px;
+          border-bottom: 1px solid var(--x-line);
+          margin-bottom: 26px;
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+        .x-tabs::-webkit-scrollbar { display: none; }
+        .x-tabs button {
+          all: unset; cursor: pointer;
+          padding: 10px 16px;
+          font-size: 13.5px; font-weight: 500;
+          color: var(--x-mute);
+          border-bottom: 2px solid transparent;
+          margin-bottom: -1px;
+          white-space: nowrap;
+          transition: color .15s, border-color .15s;
+        }
+        .x-tabs button:hover { color: var(--x-ink); }
+        .x-tabs button.on {
+          color: var(--x-accent);
+          border-bottom-color: var(--x-accent);
+        }
+
+        /* ---------- PIPELINE DIAGRAM ---------- */
+        .x-pipe {
+          display: flex;
+          align-items: stretch;
+          gap: 0;
+          border: 1px solid var(--x-line);
+          border-radius: 4px;
+          margin: 0 0 14px;
+          overflow-x: auto;
+        }
+        .x-pipe-stage {
+          flex: 1 1 0;
+          min-width: 128px;
+          display: flex;
+          flex-direction: column;
+          gap: 7px;
+          padding: 18px 16px;
+        }
+        .x-pipe-stage + .x-pipe-stage { border-left: 1px solid var(--x-line); }
+        .x-pipe-idx {
+          font-size: 10px; font-weight: 600;
+          letter-spacing: .14em; color: var(--x-soft);
+          font-family: var(--x-mono);
+        }
+        .x-pipe-name {
+          font-size: 14.5px;
+          font-weight: 600;
+          letter-spacing: -.01em;
+          color: var(--x-ink);
+        }
+        .x-pipe-tool {
+          font-family: var(--x-mono);
+          font-size: 10.5px;
+          letter-spacing: .01em;
+          color: var(--x-accent);
+          background: var(--x-bg-2);
+          border: 1px solid var(--x-line);
+          border-radius: 2px;
+          padding: 2px 6px;
+          align-self: flex-start;
+        }
+        .x-pipe-rows {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          margin-top: 4px;
+          padding-top: 8px;
+          border-top: 1px solid var(--x-line-2);
+          font-size: 12px;
+          line-height: 1.5;
+          color: var(--x-mute);
+        }
+        .x-note {
+          margin: 0 0 28px;
+          padding: 12px 16px;
+          background: var(--x-bg-2);
+          border-left: 2px solid var(--x-soft);
+          border-radius: 0 3px 3px 0;
+          font-size: 13px;
+          line-height: 1.7;
+          color: var(--x-ink-2);
+          letter-spacing: -.003em;
+        }
+
+        /* ---------- ACCORDION ---------- */
+        /* 헤드와 펼친 본문이 같은 좌우 리듬을 쓰도록 값을 한곳에 모읍니다 */
+        .x-acc-list {
+          --x-acc-x: 16px;     /* 행 좌우 여백 */
+          --x-acc-no: 48px;    /* 번호 칼럼 */
+          --x-acc-gap: 20px;   /* 칼럼 간격 */
+          --x-acc-chev: 16px;  /* 셰브론 칼럼 */
+        }
+        .x-acc { border-bottom: 1px solid var(--x-line-2); }
+        .x-acc:first-of-type { border-top: 1px solid var(--x-line); }
+        .x-acc.open { background: var(--x-bg-2); }
+        .x-acc-head {
+          position: relative;
+          box-sizing: border-box;
+          display: grid;
+          width: 100%;
+          grid-template-columns: var(--x-acc-no) 1fr var(--x-acc-chev);
+          gap: var(--x-acc-gap);
+          padding: 22px var(--x-acc-x);
+          cursor: pointer;
+          align-items: baseline;
+          transition: background .15s;
+        }
+        .x-acc-head:hover { background: var(--x-bg-2); }
+        .x-acc-toggle { all: unset; display: block; cursor: pointer; }
+        .x-acc-toggle::after { content: ''; position: absolute; inset: 0; }
+        /* 포커스 링은 제목이 아니라 행 전체에 그립니다 */
+        .dirX .x-acc-toggle:focus-visible { outline: none; }
+        .x-acc-head:has(.x-acc-toggle:focus-visible) { outline: 2px solid var(--x-accent); outline-offset: -2px; }
+        .x-acc-head:hover .x-case-title { color: var(--x-accent); }
+        .x-acc.open .x-case-title { color: var(--x-accent); }
+        .x-acc-chevron {
+          color: var(--x-soft);
+          align-self: start;
+          margin-top: 6px;
+          transition: color .15s, transform .25s cubic-bezier(.22,.61,.36,1);
+        }
+        .x-acc.open .x-acc-chevron {
+          color: var(--x-accent);
+          transform: rotate(180deg);
+        }
+        .x-case-no {
+          font-size: 12px;
+          color: var(--x-soft);
+          font-weight: 600;
+          letter-spacing: .1em;
+          font-family: var(--x-mono);
+        }
+        .x-case-title {
+          font-size: 20px;
+          font-weight: 600;
+          letter-spacing: -.02em;
+          line-height: 1.3;
+          transition: color .18s;
+        }
+        .x-case-sub {
+          margin-top: 5px;
+          font-size: 14px;
+          color: var(--x-mute);
+          line-height: 1.6;
+          letter-spacing: -.003em;
+        }
+        .x-case-meta {
+          margin-top: 10px;
+          font-size: 12px;
+          color: var(--x-mute);
+          letter-spacing: .01em;
+          display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        }
+        .x-acc-body {
+          overflow: hidden;
+          animation: accOpen .3s cubic-bezier(.22,.61,.36,1);
+        }
+        /* 펼친 본문의 좌우를 헤드의 제목 칼럼에 맞춥니다 (왼쪽=번호 칼럼, 오른쪽=셰브론 칼럼만큼 들여쓰기) */
+        .x-acc-grid {
+          padding-top: 4px;
+          padding-bottom: 32px;
+          padding-left: calc(var(--x-acc-x) + var(--x-acc-no) + var(--x-acc-gap));
+          padding-right: calc(var(--x-acc-x) + var(--x-acc-chev) + var(--x-acc-gap));
+        }
+        /* .dirX a가 색과 밑줄을 지우므로 선택자를 한 단계 높입니다 */
+        .dirX a.x-acc-link {
+          /* 행 전체를 덮는 토글 버튼보다 위에 두어 링크가 따로 눌리게 합니다 */
+          position: relative;
+          z-index: 1;
+          font-size: 12px;
+          color: var(--x-accent);
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+        @keyframes accOpen {
+          from { opacity: 0; transform: translateY(-6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ---------- SOLUTION ROWS ---------- */
+        .x-sol {
+          padding: 18px 0;
+          border-top: 1px solid var(--x-line-2);
+          display: grid;
+          grid-template-columns: 210px 1fr;
+          gap: 26px;
+          align-items: baseline;
+        }
+        .x-sol:last-child { border-bottom: 1px solid var(--x-line-2); }
+        .x-sol h4, .x-sol h5 {
+          margin: 0;
+          font-size: 14.5px;
+          font-weight: 600;
+          letter-spacing: -.008em;
+          line-height: 1.5;
+        }
+        .x-sol h4 .ph {
+          color: var(--x-accent); font-size: 10.5px;
+          letter-spacing: .12em; display: block; margin-bottom: 3px;
+          font-weight: 600; font-family: var(--x-mono);
+        }
+        .x-sol p {
+          margin: 0;
+          font-size: 14.5px;
+          line-height: 1.78;
+          color: var(--x-ink-2);
+        }
+
+        /* ---------- LESSONS ---------- */
+        .x-focus { list-style: none; margin: 0; padding: 0; }
+        .x-focus-item {
+          display: grid;
+          grid-template-columns: 34px 1fr;
+          gap: 16px;
+          align-items: baseline;
+          padding: 14px 0;
+          border-bottom: 1px solid var(--x-line-2);
+        }
+        .x-focus-item:first-child { border-top: 1px solid var(--x-line-2); }
+        .x-focus-item .n {
+          font-size: 12px;
+          color: var(--x-soft);
+          font-weight: 600;
+          letter-spacing: .08em;
+          font-family: var(--x-mono);
+        }
+        .x-focus-item .h {
+          font-size: 15px;
+          font-weight: 600;
+          letter-spacing: -.008em;
+          margin-bottom: 3px;
+        }
+        .x-focus-item .d {
+          font-size: 14px;
+          color: var(--x-mute);
+          line-height: 1.65;
+          letter-spacing: -.003em;
+        }
+
+        /* ---------- METRICS ---------- */
+        .x-results-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 1px;
+          background: var(--x-line);
+          border: 1px solid var(--x-line);
+          border-radius: 4px;
+          overflow: hidden;
+        }
+        .x-metric {
+          padding: 16px 18px;
+          background: var(--x-bg);
+          display: flex; flex-direction: column; gap: 6px;
+        }
+        /* 라벨이 대부분 한글이라 넓은 자간을 주면 글자가 벌어져 보입니다 */
+        .x-metric .k {
+          font-size: 11px;
+          letter-spacing: .04em;
+          text-transform: uppercase;
+          color: var(--x-mute);
+          font-weight: 600;
+        }
+        .x-metric .v {
+          font-size: 22px;
+          font-weight: 600;
+          color: var(--x-ink);
+          letter-spacing: -.02em;
+          font-variant-numeric: tabular-nums;
+          line-height: 1.2;
+        }
+        .x-metric.text .v {
+          font-size: 15px;
+          letter-spacing: -.005em;
+          line-height: 1.4;
+        }
+
+        /* ---------- CASE BLOCKS (도식 · 표 · 타임라인) ---------- */
+        .x-blks { margin-bottom: 28px; }
+        .x-blk { padding: 22px 0; border-top: 1px solid var(--x-line-2); }
+        .x-blk:first-child { border-top: 0; padding-top: 4px; }
+        .x-blk-h {
+          margin: 0 0 14px;
+          font-size: 15.5px;
+          font-weight: 600;
+          letter-spacing: -.01em;
+          line-height: 1.45;
+          display: flex; gap: 10px; align-items: baseline;
+        }
+        .x-blk-h .n {
+          flex: 0 0 auto;
+          font-family: var(--x-mono);
+          font-size: 11px; font-weight: 600;
+          letter-spacing: .08em;
+          color: var(--x-accent);
+        }
+        .x-blk-p {
+          margin: 14px 0 0;
+          font-size: 14.5px;
+          line-height: 1.8;
+          color: var(--x-ink-2);
+          max-width: 44em;
+        }
+        .x-blk-p.lead { margin: 0 0 14px; }
+        /* 탭 안의 블록: 구분선 대신 섹션 제목의 밑줄로 나누고, 한글 제목은 자간을 줄입니다 */
+        .x-blks.sections .x-blk { border-top: 0; padding: 0; margin-bottom: 32px; }
+        .x-blks.sections .x-blk:last-child { margin-bottom: 0; }
+        .x-section-h.x-blk-label { font-size: 12px; letter-spacing: .04em; }
+        /* 아코디언을 펼치면 배경이 --x-bg-2라서, 코드는 한 단계 진한 배경을 씁니다 */
+        .x-ic {
+          font-family: var(--x-mono);
+          font-size: .86em;
+          padding: 1px 5px;
+          background: var(--x-bg-3);
+          border-radius: 3px;
+        }
+        .x-cols {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 1px;
+          background: var(--x-line);
+          border: 1px solid var(--x-line);
+          border-radius: 4px;
+          overflow: hidden;
+        }
+        .x-col { background: var(--x-bg); padding: 14px 16px; }
+        .x-col-h {
+          font-size: 12px; font-weight: 600;
+          color: var(--x-mute);
+          margin-bottom: 8px;
+        }
+        .x-col ul { margin: 0; padding-left: 16px; }
+        .x-col li { font-size: 13.5px; line-height: 1.7; color: var(--x-ink-2); }
+        .x-col li + li { margin-top: 4px; }
+        .x-flow {
+          list-style: none; margin: 0; padding: 0;
+          display: flex; gap: 28px;
+        }
+        .x-flow-step {
+          flex: 1 1 0; min-width: 0;
+          position: relative;
+          background: var(--x-bg);
+          border: 1px solid var(--x-line);
+          border-radius: 4px;
+          padding: 14px 16px;
+        }
+        /* 단계 사이 화살표 — 글자가 아니라 테두리로 그려 스크린리더가 읽지 않게 합니다 */
+        .x-flow-step + .x-flow-step::before {
+          content: "";
+          position: absolute;
+          left: -19px; top: 50%;
+          width: 8px; height: 8px;
+          border-top: 1.5px solid var(--x-soft);
+          border-right: 1.5px solid var(--x-soft);
+          transform: translateY(-50%) rotate(45deg);
+        }
+        .x-flow-n {
+          font-family: var(--x-mono);
+          font-size: 10px; font-weight: 600;
+          letter-spacing: .14em;
+          color: var(--x-soft);
+        }
+        .x-flow-h {
+          margin: 4px 0 6px;
+          font-size: 14.5px; font-weight: 600;
+          letter-spacing: -.01em;
+        }
+        .x-flow-d { margin: 0; font-size: 13px; line-height: 1.65; color: var(--x-ink-2); }
+        .x-tbl-wrap {
+          overflow-x: auto;
+          border: 1px solid var(--x-line);
+          border-radius: 4px;
+        }
+        .x-tbl {
+          width: 100%;
+          min-width: 520px;
+          border-collapse: collapse;
+          background: var(--x-bg);
+          font-size: 13.5px;
+          line-height: 1.6;
+        }
+        .x-tbl th, .x-tbl td {
+          text-align: left;
+          vertical-align: top;
+          padding: 10px 12px;
+          border-bottom: 1px solid var(--x-line-2);
+        }
+        .x-tbl thead th {
+          font-size: 12px; font-weight: 600;
+          color: var(--x-mute);
+          background: var(--x-bg-2);
+          white-space: nowrap;
+        }
+        .x-tbl tbody th { font-weight: 600; color: var(--x-ink); white-space: nowrap; }
+        .x-tbl td { color: var(--x-ink-2); }
+        /* 짧은 값만 들어가는 칸(data의 nowrap)은 줄을 꺾지 않습니다 */
+        .x-tbl td.nw { white-space: nowrap; }
+        /* 좁은 칸에서 한글 낱말 중간이 끊기지 않게 합니다 (긴 영문은 넘치지 않게 끊어 줌) */
+        .x-tbl th, .x-tbl td, .x-col li, .x-flow-h, .x-flow-d, .x-sol h4, .x-sol h5 {
+          word-break: keep-all;
+          overflow-wrap: break-word;
+        }
+        .x-tbl tbody tr:last-child > * { border-bottom: 0; }
+        .x-code {
+          margin: 0;
+          padding: 14px 16px;
+          background: var(--x-bg);
+          border: 1px solid var(--x-line);
+          border-radius: 4px;
+          font-family: var(--x-mono);
+          font-size: 12.5px;
+          line-height: 1.75;
+          color: var(--x-ink);
+          overflow-x: auto;
+          white-space: pre;
+        }
+        .x-bul { margin: 12px 0 0; padding-left: 18px; }
+        .x-bul li { font-size: 14px; line-height: 1.75; color: var(--x-ink-2); }
+        .x-bul li + li { margin-top: 5px; }
+
+        /* ---------- STACK ROW ---------- */
+        .x-stack-row {
+          display: grid; grid-template-columns: 210px 1fr;
+          gap: 26px; align-items: baseline;
+          padding-top: 18px;
+        }
+        .x-stack-lbl {
+          font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+          color: var(--x-mute); font-weight: 600;
+        }
+        /* 칩 폭이 이름마다 달라 왼쪽 기준으로는 줄 끝이 케이스마다 제각각으로 남습니다.
+           오른쪽에 붙여 바로 위 Results 박스의 오른쪽 끝과 항상 맞춥니다.
+           (row-reverse는 칩 순서까지 뒤집혀서 쓰지 않습니다) */
+        .x-stack-row .x-pills { justify-content: flex-end; }
+
+
+        /* ---------- FOOTER ---------- */
+        .x-foot {
+          border-top: 1px solid var(--x-line);
+          background: var(--x-bg);
+          /* 헤더와 같이 좌우 여백을 바깥에 두어 본문 가장자리와 맞춥니다 */
+          padding: 0 64px;
+        }
+        .x-foot-inner {
+          max-width: 1180px;
+          width: 100%;
+          box-sizing: border-box;
+          margin: 0 auto;
+          padding: 12px 0;
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+          align-items: center;
+          font-size: 12px;
+          color: var(--x-mute);
+          letter-spacing: 0;
+        }
+        .x-foot-inner .r { text-align: right; }
+        .x-foot-inner b { color: var(--x-ink); font-weight: 600; }
+        .x-foot .dots {
+          display: inline-flex; gap: 5px;
+          margin-left: 10px; vertical-align: middle;
+        }
+        .x-foot .dots i {
+          width: 4px; height: 4px; border-radius: 50%;
+          background: var(--x-line);
+        }
+        .x-foot .dots i.on { background: var(--x-accent); }
+
+        /* ====== TABLET (<= 1024px) ====== */
+        @media (max-width: 1024px) {
+          .x-header { padding: 0 32px; }
+          .x-header-inner { padding: 14px 0; gap: 20px; }
+          .x-main { padding: 0 32px; }
+          .x-foot { padding: 0 32px; }
+          .x-foot-inner { padding: 12px 0; }
+          .x-nav { gap: 20px; }
+
+          .x-frame {
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 0 !important;
+            padding: 36px 0 56px;
+          }
+          .x-side { display: none !important; }
+
+          .x-h1 { font-size: 36px; }
+          .x-h2 { font-size: 27px; }
+          .x-lede { font-size: 16.5px; }
+          .x-sol, .x-stack-row { grid-template-columns: 170px 1fr; gap: 20px; }
+        }
+
+        /* ====== MOBILE (<= 640px) ====== */
+        @media (max-width: 640px) {
+          .x-header { padding: 0 20px; }
+          /* 탭 4개와 스위치가 한 줄에 들어가지 않아 스위치는 숨깁니다 (버전은 URL ?v= 로 고정됨) */
+          .x-header-inner {
+            grid-template-columns: minmax(0, 1fr);
+            padding: 12px 0;
+          }
+          .x-header .x-vswitch { display: none; }
+          .x-nav { gap: 22px; }
+          .x-nav button { white-space: nowrap; }
+
+          .x-main { padding: 0 20px; }
+          .x-frame { padding: 24px 0 48px; }
+
+          .x-h1 { font-size: 29px; }
+          .x-h2 { font-size: 22px; }
+          .x-lede { font-size: 16px; max-width: none; }
+
+          .x-dl-row { grid-template-columns: 1fr; gap: 6px; padding: 14px 0; }
+          .x-sol, .x-stack-row { grid-template-columns: 1fr; gap: 6px; padding: 16px 0; }
+          .x-stack-row { padding-top: 16px; }
+
+          .x-acc-list { --x-acc-x: 10px; --x-acc-no: 32px; --x-acc-gap: 12px; }
+          .x-acc-head { padding: 18px var(--x-acc-x); }
+          /* 좁은 화면에서는 본문을 들여쓰지 않고 행 여백만 둡니다 */
+          .x-acc-grid { padding-left: var(--x-acc-x); padding-right: var(--x-acc-x); padding-bottom: 28px; }
+          .x-case-title { font-size: 18px; }
+
+          .x-feat-head { padding: 18px; }
+          .x-feat-body { padding: 18px; }
+          /* 탭 줄을 카드 테두리까지 넓혀, 넘친 탭이 카드 가장자리에서 잘리게 합니다 (옆으로 넘길 수 있다는 신호) */
+          .x-feat-body .x-tabs { margin: 0 -18px 22px; padding: 0 18px; scroll-padding: 0 18px; }
+          .x-tabs button { padding: 10px 12px; }
+          .x-feat-title { font-size: 21px; }
+
+          .x-timeline li { grid-template-columns: 62px 1fr; gap: 12px; }
+          .x-results-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+
+          .x-blk-h { font-size: 15px; }
+          /* 좁은 화면에서는 단계를 세로로 쌓고, 화살표도 아래를 향하게 돌립니다 */
+          .x-flow { flex-direction: column; gap: 22px; }
+          .x-flow-step + .x-flow-step::before {
+            left: 50%; top: -15px;
+            transform: translateX(-50%) rotate(135deg);
+          }
+
+          .x-foot { padding: 0 20px; }
+          /* 현재 섹션은 위 탭이 보여 주므로 푸터는 한 줄로 줄입니다 */
+          .x-foot-inner {
+            grid-template-columns: 1fr auto;
+            padding: 10px 0;
+          }
+          .x-foot-inner > div:nth-child(2) { display: none; }
+        }
+      `}</style>
+
+      {/* HEADER */}
+      <header className="x-header">
+        <div className="x-header-inner">
+          <nav className="x-nav">
+            {C2_SECTIONS.map((s) =>
+            <button
+              key={s.id}
+              className={section === s.id ? "active" : ""}
+              aria-current={section === s.id ? "page" : undefined}
+              onClick={() => goSectionById(s.id)}>
+                {s.label}
+              </button>
+            )}
+          </nav>
+          {vswitch(false)}
+        </div>
+      </header>
+
+      {/* MAIN */}
+      <main className="x-main" ref={scrollRef}>
+        <div key={animKey + "-" + variant} className={"x-frame" + (slideDir > 0 ? " x-slide-right" : slideDir < 0 ? " x-slide-left" : "")}>
+          {section === "landing" &&
+          <>
+              <div ref={colRef}>
+                <div className="x-eyebrow"><span className="bar" /><b>00</b> · Landing</div>
+                <h1 className="x-h1">
+                  {data.nameEn}<br />
+                  <span className="em">{v.role}</span>
+                </h1>
+                <p className="x-lede">{v.tagline}</p>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 44 }}>
+                  <button className="x-btn x-btn-primary" onClick={() => goSectionById("work")}>
+                    View Work
+                  </button>
+                  <button className="x-btn" onClick={() => goSectionById("about")}>
+                    About
+                  </button>
+                </div>
+
+                <div className="x-section-h">Featured Work</div>
+                <div className="x-feat">
+                  <div className="x-feat-head">
+                    <div className="x-feat-badges">
+                      <span className="x-badge">Featured</span>
+                      <span className="x-badge ghost">{featured.tag}</span>
+                      <span style={{ fontSize: 12, color: "var(--x-mute)" }}>{featured.period}</span>
+                    </div>
+                    <div className="x-feat-title">{featured.title}</div>
+                    <p className="x-feat-sub">{featured.subtitle}</p>
+                  </div>
+                  <div className="x-feat-body">
+                    <p style={{ margin: "0 0 20px", fontSize: 14.5, lineHeight: 1.8, color: "var(--x-ink-2)" }}>
+                      {featured.lessons || featured.challenge}
+                    </p>
+                    {(featured.results || featured.metrics) &&
+                    <div className="x-results-grid" style={{ marginBottom: 20 }}>
+                      {(featured.results || featured.metrics).map((m, i) =>
+                        <div key={i} className={"x-metric" + (featured.results ? "" : " text")}>
+                          <div className="k">{m.k}</div>
+                          <div className="v">{m.v}</div>
+                        </div>
+                      )}
+                    </div>
+                    }
+                    <button className="x-btn" onClick={() => goSectionById("work")}>
+                      자세히 보기 →
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <aside className="x-side">
+                <SideToc items={toc} onJump={jumpToBlock} />
+                {(v.sideNotes?.landing || []).map((n, i) =>
+                  <div key={i}>
+                    <div className="lbl">{n.lbl}</div>
+                    <div className="val">{n.val}</div>
+                  </div>
+                )}
+              </aside>
+            </>
+          }
+
+          {section === "about" &&
+          <>
+              <div ref={colRef}>
+                <div className="x-eyebrow"><span className="bar" /><b>01</b> · About</div>
+                <h2 className="x-h2">{v.id === "agent" ? <>사람의 인지에서 출발해<br />에이전트 시스템으로.</> : <>사람의 인지에서 출발해<br />사람이 놓이는 화면으로.</>}</h2>
+
+                <div className="x-section-h" data-toc="">Profile</div>
+                <div style={{ fontSize: 15.5, lineHeight: 1.9, color: "var(--x-ink-2)", marginBottom: 44, maxWidth: "40em" }}>
+                  {v.intro.map((p, i) => <p key={i} style={{ margin: "0 0 1.1em" }}>{p}</p>)}
+                </div>
+
+                <div className="x-section-h" data-toc="">Skills</div>
+                <dl className="x-dl" style={{ marginBottom: 44 }}>
+                  {skillEntries.map(([cat, items]) =>
+                <div key={cat} className="x-dl-row">
+                      <dt>{cat}</dt>
+                      <dd className="x-pills">{items.map((s) => <span key={s} className="x-pill">{s}</span>)}</dd>
+                    </div>
+                )}
+                </dl>
+
+                <div className="x-section-h" data-toc="">Experience</div>
+                <div className="x-exp" style={{ marginBottom: 44 }}>
+                  <div className="x-exp-head">
+                    <div><b>{data.experience.company}</b><span className="role">{data.experience.role}</span></div>
+                    <span className="x-exp-period">{data.experience.period}</span>
+                  </div>
+                  <ul className="x-timeline">
+                    {data.experience.timeline.map((t, i) =>
+                    <li key={i} className={t.now ? "now" : ""}>
+                        <span className="t-date">{t.date}</span>
+                        <span>{t.now ? <b>{t.desc}</b> : t.desc}</span>
+                      </li>
+                    )}
+                  </ul>
+                </div>
+
+                <div className="x-section-h" data-toc="">Education</div>
+                <dl className="x-dl">
+                  {data.education.map((e, i) =>
+                <div key={i} className="x-dl-row">
+                      <dt>{e.period}</dt>
+                      <dd><b>{e.school}</b><div style={{ color: "var(--x-mute)", marginTop: 3, fontSize: 14 }}>{e.detail}</div></dd>
+                    </div>
+                )}
+                </dl>
+              </div>
+
+              <aside className="x-side">
+                <SideToc items={toc} onJump={jumpToBlock} />
+              </aside>
+            </>
+          }
+
+          {section === "work" &&
+              <>
+                <div ref={colRef}>
+                  <div className="x-eyebrow"><span className="bar" /><b>02</b> · Work</div>
+                  <h2 className="x-h2" style={{ marginBottom: 40 }}>프로젝트 나열이 아닌,<br />문제와 설계의 흐름.</h2>
+
+                  {/* ── Featured Case ── */}
+                  <div className="x-section-h">Featured Case</div>
+                  <div className="x-feat" style={{ marginBottom: 52 }}
+                       data-toc={featured.title} data-toc-no={featured.number}>
+                    <div className="x-feat-head">
+                      <div className="x-feat-badges">
+                        <span className="x-badge">{featured.number}</span>
+                        <span className="x-badge ghost">{featured.tag}</span>
+                        <span style={{ fontSize: 12, color: "var(--x-mute)" }}>{featured.period}</span>
+                        {featured.link &&
+                          <a href={`https://${featured.link}`} target="_blank" rel="noopener noreferrer"
+                             style={{ fontSize: 12, color: "var(--x-accent)", textDecoration: "underline", textUnderlineOffset: 2 }}>
+                            {featured.link} ↗
+                          </a>
+                        }
+                      </div>
+                      <div className="x-feat-title">{featured.title}</div>
+                      <p className="x-feat-sub">{featured.subtitle}</p>
+                    </div>
+
+                    <div className="x-feat-body">
+                      {/* Featured는 상세판: Bada는 전용 탭, tabs가 있는 케이스는 공용 탭, 나머지는 한 번에 */}
+                      {featured.id === "bada" ? (
+                        <BadaDetail c={featured} tab={featTab} onTab={setFeatTab} />
+                      ) : featured.tabs ? (
+                        <TabbedDetail c={featured} tab={featTab} onTab={setFeatTab} />
+                      ) : (
+                        <>
+                          <div className="x-section-h">Challenge</div>
+                          <p style={{ fontSize: 15, lineHeight: 1.85, margin: "0 0 32px", color: "var(--x-ink-2)", maxWidth: "40em" }}>
+                            {featured.challenge || featured.problem}
+                          </p>
+                          <CaseDetail c={featured} />
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Other Projects ── */}
+                  <div className="x-section-h">Selected Projects</div>
+                  <div className="x-acc-list">
+                    {others.map((c) => {
+                      const open = expandedCase === c.id;
+                      return (
+                        <div key={c.id} className={"x-acc" + (open ? " open" : "")}
+                             data-toc={c.title} data-toc-no={c.number}>
+                          {/* 링크를 메타 줄에 두려고 헤드 전체가 아닌 제목만 버튼으로 둡니다.
+                              버튼의 ::after가 행 전체를 덮어 클릭 영역은 그대로이고, 링크는 그 위에 올립니다. */}
+                          <div className="x-acc-head">
+                            <div className="x-case-no">{c.number}</div>
+                            <div>
+                              <button
+                                type="button"
+                                className="x-acc-toggle x-case-title"
+                                aria-expanded={open}
+                                onClick={() => setExpandedCase(open ? null : c.id)}>
+                                {c.title}
+                              </button>
+                              <div className="x-case-sub">{c.subtitle}</div>
+                              <div className="x-case-meta">
+                                <span>{c.period}</span>
+                                <span className="x-badge ghost">{c.tag}</span>
+                                {c.link &&
+                                <a className="x-acc-link" href={`https://${c.link}`} target="_blank" rel="noopener noreferrer">
+                                  {c.link} ↗
+                                </a>
+                                }
+                              </div>
+                            </div>
+                            <svg className="x-acc-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                              <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </div>
+                          {open &&
+                          <div className="x-acc-body">
+                            <div className="x-acc-grid">
+                              {/* 아코디언은 간단판: 탭 없이 Challenge → Approach/Solution → 결과 → Stack */}
+                              <div className="x-section-h">Challenge</div>
+                              <p style={{ margin: "0 0 28px", fontSize: 14.5, lineHeight: 1.85, color: "var(--x-ink-2)", maxWidth: "40em" }}>
+                                {c.challenge || c.problem}
+                              </p>
+                              <CaseDetail c={c} />
+                            </div>
+                          </div>
+                          }
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <aside className="x-side">
+                  <SideToc items={toc} onJump={jumpToBlock} />
+                </aside>
+              </>
+          }
+
+
+          {section === "contact" &&
+          <>
+              <div ref={colRef}>
+                <div className="x-eyebrow"><span className="bar" /><b>03</b> · Contact</div>
+                <h2 className="x-h2">
+                  {data.contact.heading.split("\n").map((line, i, arr) =>
+                  <React.Fragment key={i}>{line}{i < arr.length - 1 && <br />}</React.Fragment>
+                  )}
+                </h2>
+                <dl className="x-dl">
+                  <div className="x-dl-row"><dt>Email</dt><dd><b><a href={`mailto:${data.contact.email}`}>{data.contact.email}</a></b></dd></div>
+                  <div className="x-dl-row"><dt>GitHub</dt><dd><b><a href={`https://${data.contact.github}`} target="_blank" rel="noopener noreferrer">{data.contact.github}</a></b></dd></div>
+                  <div className="x-dl-row"><dt>Location</dt><dd>{data.contact.location}</dd></div>
+                </dl>
+              </div>
+
+              <aside className="x-side">
+                <SideToc items={toc} onJump={jumpToBlock} />
+                <div>
+                  <div className="lbl">Response time</div>
+                  <div className="val"><b>~24h</b></div>
+                </div>
+                <div>
+                  <div className="lbl">Scope</div>
+                  <div className="val">{v.focus}</div>
+                </div>
+              </aside>
+            </>
+          }
+        </div>
+      </main>
+
+      {/* FOOTER */}
+      <footer className="x-foot">
+        <div className="x-foot-inner">
+          <div>{v.navLabel}</div>
+          <div>
+            <b>{current.label}</b>
+            <span className="dots">
+              {C2_SECTIONS.map((_, i) =>
+              <i key={i} className={i === sectionIdx ? "on" : ""} />
+              )}
+            </span>
+          </div>
+          <div className="r">Portfolio v2026.08</div>
+        </div>
+      </footer>
+
+    </div>);
+
+}
